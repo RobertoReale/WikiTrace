@@ -222,9 +222,10 @@ async function handleNavCompleted(details) {
   const mode = settings.saveMode ?? 'auto';
   const fallbackParentId = tabState[tabId]?.pageId ?? null;
   const parentId = await getReferrerId(tabId, fallbackParentId);
+  const hintTitle = tabState[tabId]?.pendingTitle ?? null;
 
   if (mode === 'auto') {
-    const id = await savePage({ url, title: null, parentId });
+    const id = await savePage({ url, title: hintTitle, parentId });
     tabState[tabId] = { pageId: id, url };
     if (id) showBadge(tabId);
   } else {
@@ -232,6 +233,7 @@ async function handleNavCompleted(details) {
       pageId: tabState[tabId]?.pageId ?? null,
       pendingUrl: url,
       pendingParentId: parentId,
+      pendingTitle: hintTitle,
     };
   }
 }
@@ -255,7 +257,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if ((settings.saveMode ?? 'auto') !== 'scroll') { sendResponse({ ok: false }); return; }
         const state = tabState[tabId];
         if (!state?.pendingUrl) { sendResponse({ ok: false }); return; }
-        const id = await savePage({ url: state.pendingUrl, title: null, parentId: state.pendingParentId });
+        const id = await savePage({ url: state.pendingUrl, title: state.pendingTitle || null, parentId: state.pendingParentId });
         tabState[tabId] = { pageId: id, url: state.pendingUrl };
         if (id) showBadge(tabId);
         sendResponse({ ok: true, id });
@@ -310,6 +312,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'GET_PAGES': {
         const { pages = {} } = await storageGet('pages');
         sendResponse({ pages: Object.values(pages) });
+        break;
+      }
+
+      case 'LINK_HINT': {
+        const tabId = sender.tab?.id;
+        if (tabId && msg.url && msg.title) {
+          tabState[tabId] = { ...tabState[tabId], pendingTitle: msg.title };
+        }
+        sendResponse({ ok: true });
         break;
       }
 

@@ -118,6 +118,18 @@
     select:focus { border-color: var(--accent); }
 
     #status-msg { padding: 0 14px 10px; font-size: 11px; color: var(--success); min-height: 20px; }
+
+    .donate-footer {
+      border-top: 1px solid var(--border);
+      padding: 9px 14px;
+      text-align: center;
+    }
+    .donate-link {
+      font-size: 11px; color: var(--text3);
+      text-decoration: none; transition: color .12s;
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .donate-link:hover { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -164,6 +176,12 @@
   </div>
 
   <div id="status-msg"></div>
+
+  <div class="donate-footer">
+    <a class="donate-link" href="https://paypal.me/RobertoReale12" target="_blank" rel="noopener noreferrer">
+      ☕ Buy me a coffee — keep WikiTrace free
+    </a>
+  </div>
 
   <script src="popup.js"></script>
 </body>

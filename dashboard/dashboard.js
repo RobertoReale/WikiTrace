@@ -66,11 +66,21 @@ function renderCategoryFilter() {
   for (const [cat, count] of cats) {
     const el = document.createElement('div');
     el.className = 'cat-item' + (activeCategories.has(cat) ? '' : ' disabled');
-    el.innerHTML = `
-      <span class="cat-dot" style="background:${catColor(cat)}"></span>
-      <span class="cat-name" title="${cat}">${cat}</span>
-      <span class="cat-count">${count}</span>
-    `;
+
+    const dot = document.createElement('span');
+    dot.className = 'cat-dot';
+    dot.style.background = catColor(cat);
+
+    const name = document.createElement('span');
+    name.className = 'cat-name';
+    name.title = cat;
+    name.textContent = cat;
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'cat-count';
+    countSpan.textContent = count;
+
+    el.append(dot, name, countSpan);
     el.addEventListener('click', () => {
       if (activeCategories.has(cat)) {
         activeCategories.delete(cat);
@@ -190,6 +200,8 @@ document.querySelectorAll('.tab').forEach((btn) => {
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b === btn));
     $('panel-list').classList.toggle('hidden', currentTab !== 'list');
     $('panel-graph').classList.toggle('hidden', currentTab !== 'graph');
+    $('panel-about').classList.toggle('hidden', currentTab !== 'about');
+    document.querySelector('.sidebar').classList.toggle('hidden', currentTab === 'about');
     $('list-controls').style.display = currentTab === 'list' ? '' : 'none';
     if (currentTab === 'graph') graphView.init(allPages);
   });
@@ -389,13 +401,24 @@ const graphView = (() => {
     return `M${expanded.map((p) => p.join(',')).join('L')}Z`;
   }
 
-  function build(pages) {
+  function build(inputPages) {
     built = true;
     const svg = d3.select('#graph-svg');
     svg.selectAll('*').remove();
 
-    if (pages.length === 0) { $('graph-empty').classList.remove('hidden'); return; }
+    if (inputPages.length === 0) { $('graph-empty').classList.remove('hidden'); return; }
     $('graph-empty').classList.add('hidden');
+
+    const MAX_NODES = 100;
+    const notice = $('graph-notice');
+    let pages = inputPages;
+    if (inputPages.length > MAX_NODES) {
+      pages = [...inputPages].sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_NODES);
+      notice.textContent = `Showing ${MAX_NODES} of ${inputPages.length} pages (most recent). Use category filters to narrow down.`;
+      notice.classList.remove('hidden');
+    } else {
+      notice.classList.add('hidden');
+    }
 
     const W = $('graph-svg').clientWidth || 900;
     const H = $('graph-svg').clientHeight || 600;

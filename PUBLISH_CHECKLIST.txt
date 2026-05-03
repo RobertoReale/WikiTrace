@@ -1,0 +1,115 @@
+WikiTrace — Chrome Web Store Publication Checklist
+====================================================
+Generated: 2026-05-03
+
+DONE BY CODE (already fixed in repo)
+--------------------------------------
+[x] manifest.json — icons block added (16/48/128)
+[x] manifest.json — default_icon added in action block
+[x] manifest.json — HTTPS-only host_permissions
+[x] icons/icon16.png, icon48.png, icon128.png — generated
+[x] lib/d3.min.js — present in repo
+[x] No stray console.log calls (only one console.warn in error handler, acceptable)
+[x] Popup donate footer (PayPal.me link)
+[x] Dashboard About tab with changelog + roadmap + donate button
+
+
+TODO — MANUAL STEPS (you must do these yourself)
+-------------------------------------------------
+
+BLOCKING (store will reject without these)
+------------------------------------------
+
+1. PRIVACY POLICY URL
+   - The store requires a public URL because the extension uses chrome.storage.local.
+   - Quickest option: create a GitHub Pages site or a Notion/Google Doc published as web page.
+   - Content needed (one page is enough):
+       "WikiTrace stores your Wikipedia browsing history locally in your browser
+        using chrome.storage.local. No data is ever sent to any server, sold, or
+        shared. You can delete all data at any time via the Clear All button."
+   - After publishing the URL, paste it in the Chrome Web Store Developer Dashboard
+     under Privacy > Privacy Policy URL.
+
+2. ICON QUALITY CHECK
+   - Open icons/icon16.png, icon48.png, icon128.png in any image viewer.
+   - The "W" must be readable. If the font looks bad at 16px, redesign in a tool
+     like Figma, Canva, or GIMP and re-export. The generated PNGs are functional
+     placeholders — replace them with polished artwork before publishing.
+
+3. DEVELOPER ACCOUNT FEE
+   - One-time $5 USD registration at https://chrome.google.com/webstore/devconsole
+   - Pay with a credit/debit card tied to a Google account.
+
+
+STRONGLY RECOMMENDED (improves store conversion)
+------------------------------------------------
+
+4. SCREENSHOTS (minimum 1, recommended 2–3)
+   - Resolution: 1280×800 px or 640×400 px (exact, no other sizes accepted).
+   - Suggested shots:
+       a) Popup open on a Wikipedia page (shows the saved badge + stats)
+       b) Dashboard > List tab with several pages saved
+       c) Dashboard > Graph tab with a force-directed graph visible
+   - Tool: Chrome DevTools device toolbar set to 1280×800, then screenshot.
+   - Upload in the store listing under "Screenshots".
+
+5. PROMOTIONAL TILE (optional but boosts visibility)
+   - Small tile: 440×280 px (shown in search results)
+   - Large promo: 920×680 px (shown on featured pages — not required at launch)
+   - Design on Canva or Figma using the purple (#6366f1) brand color.
+
+6. STORE LISTING TEXT
+   - Short description (max 132 chars):
+       "Track every Wikipedia page you visit. Visualise your knowledge graph.
+        Export, filter, and explore your reading history."
+   - Long description: paste the text below into the store form —
+
+       WikiTrace automatically saves every Wikipedia article you read and builds
+       a visual knowledge graph of your browsing history.
+
+       FEATURES
+       • Force-directed graph — see how topics connect
+       • Three save modes: automatic, scroll-to-bottom, or manual
+       • Category detection via Wikipedia API
+       • Filter and search your saved pages
+       • Import / Export JSON backup
+       • Light / dark theme
+       • 100% local — no account, no tracking, no ads
+
+       Free forever. If WikiTrace saves you time, a coffee keeps it going.
+
+7. CATEGORY
+   - Choose "Productivity" in the store category dropdown.
+   - Add tags: wikipedia, knowledge, productivity, research, history
+
+8. TESTING ON A CLEAN CHROME PROFILE
+   - Open chrome://extensions → Enable Developer mode → Load unpacked → select WikiTrace folder.
+   - Visit 5–6 Wikipedia articles, verify:
+       a) Badge "✓" appears after each visit (auto mode)
+       b) Popup shows correct title, categories, stats
+       c) Dashboard List tab shows all pages
+       d) Dashboard Graph tab renders nodes and edges
+       e) Import/Export round-trip works (export JSON, clear all, import back)
+       f) About tab shows correctly, PayPal link opens in new tab
+   - Repeat with save mode = "manual" and "scroll bottom".
+
+
+AFTER PUBLISHING
+----------------
+
+9. ANALYTICS (optional)
+   - The store dashboard shows installs, uninstalls, active users.
+   - No code changes needed — it's automatic.
+
+10. UPDATE FLOW
+    - Bump "version" in manifest.json (e.g. "1.1.0" → "1.2.0").
+    - Zip the folder (excluding .git/).
+    - Upload new zip in the Developer Dashboard > your extension > Package.
+    - Store review typically takes 1–3 business days.
+
+
+DONATION SETUP (already done in code)
+--------------------------------------
+- Popup footer: PayPal.me/RobertoReale12
+- Dashboard About tab: yellow "Buy me a coffee" button
+- No code changes needed. Make sure your PayPal.me link is active and accepting payments.

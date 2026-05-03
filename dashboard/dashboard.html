@@ -17,6 +17,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="list">List</button>
       <button class="tab" data-tab="graph">Graph</button>
+      <button class="tab" data-tab="about">About</button>
     </div>
     <button class="btn-theme" id="btn-theme" title="Toggle theme">☀</button>
     <input type="file" id="import-file-input" accept=".json" style="display:none">
@@ -62,6 +63,7 @@
     <div class="panel hidden" id="panel-graph">
       <div class="graph-view">
         <svg id="graph-svg"></svg>
+        <div id="graph-notice" class="graph-notice hidden"></div>
         <div id="graph-empty" class="hidden">
           <p>No pages to display.</p>
           <small>Browse some Wikipedia pages to get started.</small>
@@ -70,6 +72,60 @@
           <div><span class="legend-line"></span> Navigation link</div>
           <div><span class="legend-line legend-dashed"></span> Chronological link</div>
         </div>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="panel-about">
+      <div class="about-view">
+
+        <div class="about-header">
+          <div class="about-logo">W</div>
+          <div>
+            <h2 class="about-title">WikiTrace</h2>
+            <span class="about-version">v1.0.0</span>
+          </div>
+        </div>
+
+        <div class="about-columns">
+
+          <div class="about-card">
+            <h3 class="about-card-title">What's new in v1.0</h3>
+            <ul class="changelog">
+              <li><span class="tag tag-new">New</span> Force-directed graph with category clustering</li>
+              <li><span class="tag tag-new">New</span> Automatic page capture on Wikipedia navigation</li>
+              <li><span class="tag tag-new">New</span> Three save modes: auto, scroll bottom, manual</li>
+              <li><span class="tag tag-new">New</span> Category detection via Wikipedia API</li>
+              <li><span class="tag tag-new">New</span> Title pre-capture from link clicks</li>
+              <li><span class="tag tag-new">New</span> Import / Export JSON backup</li>
+              <li><span class="tag tag-new">New</span> Light / dark theme</li>
+              <li><span class="tag tag-new">New</span> 100-node graph cap with notice banner</li>
+            </ul>
+          </div>
+
+          <div class="about-card">
+            <h3 class="about-card-title">Roadmap — funded by your support</h3>
+            <p class="roadmap-intro">Every coffee helps reach the next milestone:</p>
+            <ul class="roadmap-list">
+              <li><span class="roadmap-icon">📊</span> Export graph as PDF / PNG image</li>
+              <li><span class="roadmap-icon">📅</span> Date-range filter in graph view</li>
+              <li><span class="roadmap-icon">🔖</span> Named collections / reading lists</li>
+              <li><span class="roadmap-icon">🌍</span> Full multi-language Wikipedia support</li>
+              <li><span class="roadmap-icon">🔗</span> Shareable graph link</li>
+              <li><span class="roadmap-icon">📝</span> Personal notes on each saved page</li>
+            </ul>
+          </div>
+
+        </div>
+
+        <div class="about-donate">
+          <p class="about-donate-text">WikiTrace is free. If it saves you time or sparks curiosity,<br>a coffee keeps development going.</p>
+          <a class="btn-coffee" href="https://paypal.me/RobertoReale12" target="_blank" rel="noopener noreferrer">
+            ☕ Buy me a coffee — PayPal.me
+          </a>
+        </div>
+
+        <p class="about-footer-line">Built with care by Roberto &mdash; open-source, no tracking, no ads.</p>
+
       </div>
     </div>
 
