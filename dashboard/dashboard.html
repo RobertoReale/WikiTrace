@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WikiTrace — Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+<div class="app">
+
+  <div class="topbar">
+    <div class="logo">W</div>
+    <h1>WikiTrace</h1>
+    <span class="topbar-stats" id="topbar-stats"></span>
+    <div class="tabs">
+      <button class="tab active" data-tab="list">List</button>
+      <button class="tab" data-tab="graph">Graph</button>
+    </div>
+    <button class="btn-theme" id="btn-theme" title="Toggle theme">☀</button>
+    <input type="file" id="import-file-input" accept=".json" style="display:none">
+    <button class="btn-secondary" id="btn-import">Import</button>
+    <button class="btn-secondary" id="btn-export">Export</button>
+    <button class="btn-danger" id="btn-clear">Clear all</button>
+  </div>
+
+  <div class="content">
+
+    <div class="sidebar">
+
+      <div class="sidebar-section" id="list-controls">
+        <h3>Search</h3>
+        <input type="search" class="filter-input" id="search-input" placeholder="Filter pages…">
+        <div class="sort-btn-group" style="margin-top:10px;">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px;">Sort by</div>
+          <button class="sort-btn active" data-sort="date-desc">Date added <span>↓</span></button>
+          <button class="sort-btn" data-sort="date-asc">Date added <span>↑</span></button>
+          <button class="sort-btn" data-sort="title">Title A–Z</button>
+          <button class="sort-btn" data-sort="category">Category</button>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>Categories</h3>
+        <div class="cat-list" id="cat-filter-list"></div>
+      </div>
+
+      <div class="sidebar-section add-panel">
+        <h3>Add URLs (batch)</h3>
+        <textarea id="add-urls-input" placeholder="One Wikipedia URL per line&#10;https://en.wikipedia.org/wiki/…"></textarea>
+        <button class="btn-add" id="btn-add-urls">Add</button>
+        <div id="add-msg"></div>
+      </div>
+
+    </div>
+
+    <div class="panel" id="panel-list">
+      <div class="list-view" id="list-view"></div>
+    </div>
+
+    <div class="panel hidden" id="panel-graph">
+      <div class="graph-view">
+        <svg id="graph-svg"></svg>
+        <div id="graph-empty" class="hidden">
+          <p>No pages to display.</p>
+          <small>Browse some Wikipedia pages to get started.</small>
+        </div>
+        <div class="graph-legend">
+          <div><span class="legend-line"></span> Navigation link</div>
+          <div><span class="legend-line legend-dashed"></span> Chronological link</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="io-toast" class="io-toast hidden"></div>
+
+<script src="../lib/d3.min.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
