@@ -601,66 +601,94 @@ const graphView = (() => {
 
     const LABEL_H = 14;
     const HULL_PAD = 22;
-    const hullBBoxes = hullData.map((d) => ({
-      cat: d.cat,
-      minX: Math.min(...d.nodes.map((n) => n.x)) - HULL_PAD,
-      maxX: Math.max(...d.nodes.map((n) => n.x)) + HULL_PAD,
-      minY: Math.min(...d.nodes.map((n) => n.y)) - HULL_PAD,
-      maxY: Math.max(...d.nodes.map((n) => n.y)) + HULL_PAD,
-    }));
-    const labelPos = hullData.map((d) => ({
-      cat: d.cat,
-      x: d.nodes.reduce((s, n) => s + n.x, 0) / d.nodes.length,
-      y: Math.min(...d.nodes.map((n) => n.y)) - 40,
-      minY: Math.min(...d.nodes.map((n) => n.y)) - 20,
-    }));
+    const LABEL_MARGIN = 16;
+
+    const labelPos = hullData.map((d) => {
+      const cx = d.nodes.reduce((s, n) => s + n.x, 0) / d.nodes.length;
+      const cy = d.nodes.reduce((s, n) => s + n.y, 0) / d.nodes.length;
+      return {
+        cat: d.cat, cx, cy,
+        hMinX: Math.min(...d.nodes.map((n) => n.x)) - HULL_PAD,
+        hMaxX: Math.max(...d.nodes.map((n) => n.x)) + HULL_PAD,
+        hMinY: Math.min(...d.nodes.map((n) => n.y)) - HULL_PAD,
+        hMaxY: Math.max(...d.nodes.map((n) => n.y)) + HULL_PAD,
+        x: 0, y: 0, anchor: 'middle',
+      };
+    });
+
+    // Place each label at the hull edge pointing away from the graph centroid
+    const gcx = labelPos.reduce((s, lp) => s + lp.cx, 0) / labelPos.length;
+    const gcy = labelPos.reduce((s, lp) => s + lp.cy, 0) / labelPos.length;
+    for (const lp of labelPos) {
+      let dx = lp.cx - gcx, dy = lp.cy - gcy;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len < 1) { dx = 0; dy = -1; }
+      else { dx /= len; dy /= len; }
+
+      if (Math.abs(dy) >= Math.abs(dx)) {
+        lp.anchor = 'middle';
+        lp.x = lp.cx;
+        lp.y = dy <= 0 ? lp.hMinY - LABEL_MARGIN : lp.hMaxY + LABEL_MARGIN;
+      } else {
+        lp.y = lp.cy;
+        if (dx < 0) { lp.anchor = 'end';   lp.x = lp.hMinX - LABEL_MARGIN; }
+        else        { lp.anchor = 'start'; lp.x = lp.hMaxX + LABEL_MARGIN; }
+      }
+    }
+
+    // Bounding box for a label respecting its text-anchor
+    const lbbox = (lp) => {
+      const hw = lp.cat.length * 3.5;
+      const lx = lp.anchor === 'start' ? lp.x : lp.anchor === 'end' ? lp.x - hw * 2 : lp.x - hw;
+      const rx = lp.anchor === 'start' ? lp.x + hw * 2 : lp.anchor === 'end' ? lp.x : lp.x + hw;
+      return { lx, rx, ty: lp.y - LABEL_H, by: lp.y + 4 };
+    };
 
     for (let iter = 0; iter < 30; iter++) {
       let moved = false;
-      // Phase 1: label vs label collision
       for (let i = 0; i < labelPos.length; i++) {
         for (let j = i + 1; j < labelPos.length; j++) {
           const a = labelPos[i], b = labelPos[j];
-          const minSep = (a.cat.length + b.cat.length) * 3.5;
-          const dx = Math.abs(b.x - a.x);
-          const dy = Math.abs(b.y - a.y);
-          if (dx < minSep && dy < LABEL_H) {
-            const push = (LABEL_H - dy) / 2 + 1;
-            if (b.y >= a.y) { a.y -= push; b.y += push; }
-            else             { a.y += push; b.y -= push; }
-            moved = true;
-          }
-        }
-      }
-      // Phase 2: push labels out of foreign hull bounding boxes
-      for (let i = 0; i < labelPos.length; i++) {
-        const lp = labelPos[i];
-        const tw = lp.cat.length * 3.5;
-        for (let j = 0; j < hullBBoxes.length; j++) {
-          if (hullBBoxes[j].cat === lp.cat) continue;
-          const bb = hullBBoxes[j];
-          if (lp.x + tw > bb.minX && lp.x - tw < bb.maxX &&
-              lp.y + 4  > bb.minY && lp.y - LABEL_H < bb.maxY) {
-            const exitUp    = (lp.y + 4)  - bb.minY;
-            const exitDown  = bb.maxY - (lp.y - LABEL_H);
-            const exitLeft  = (lp.x + tw) - bb.minX;
-            const exitRight = bb.maxX - (lp.x - tw);
-            const minV = Math.min(exitUp, exitDown);
-            const minH = Math.min(exitLeft, exitRight);
-            if (minV <= minH) {
-              if (exitUp <= exitDown) lp.y -= exitUp + 2;
-              else                    lp.y += exitDown + 2;
+          const ba = lbbox(a), bb = lbbox(b);
+          if (ba.rx > bb.lx && ba.lx < bb.rx && ba.by > bb.ty && ba.ty < bb.by) {
+            const overlapX = Math.min(ba.rx - bb.lx, bb.rx - ba.lx);
+            const overlapY = Math.min(ba.by - bb.ty, bb.by - ba.ty);
+            if (overlapY <= overlapX) {
+              const push = overlapY / 2 + 1;
+              if (b.y >= a.y) { a.y -= push; b.y += push; }
+              else             { a.y += push; b.y -= push; }
             } else {
-              if (exitLeft <= exitRight) lp.x -= exitLeft + 2;
-              else                       lp.x += exitRight + 2;
+              const push = overlapX / 2 + 1;
+              if (b.x >= a.x) { a.x -= push; b.x += push; }
+              else             { a.x += push; b.x -= push; }
             }
             moved = true;
           }
         }
       }
-      // Never push a category label below its own cluster's topmost node
-      for (const lp of labelPos) {
-        if (lp.y > lp.minY) lp.y = lp.minY;
+      // Phase 2: push category labels away from node labels
+      for (let i = 0; i < labelPos.length; i++) {
+        const lp = labelPos[i];
+        const visNodes = nodesData.filter((n) => !activeFilter || activeFilter.has(n.category));
+        for (const node of visNodes) {
+          const disp = node.title.length > 28 ? node.title.slice(0, 26) + '…' : node.title;
+          const nw = disp.length * 6.5;
+          const nlx = node.x + 10, nrx = node.x + 10 + nw;
+          const nty = node.y - 8,  nby = node.y + 4;
+          const ba = lbbox(lp);
+          if (ba.rx > nlx && ba.lx < nrx && ba.by > nty && ba.ty < nby) {
+            const ox = Math.min(ba.rx - nlx, nrx - ba.lx);
+            const oy = Math.min(ba.by - nty, nby - ba.ty);
+            if (oy <= ox) {
+              if (lp.y < node.y) lp.y -= oy + 2;
+              else               lp.y += oy + 2;
+            } else {
+              if (lp.x < node.x) lp.x -= ox + 2;
+              else               lp.x += ox + 2;
+            }
+            moved = true;
+          }
+        }
       }
       if (!moved) break;
     }
@@ -670,7 +698,8 @@ const graphView = (() => {
       .attr('fill', (d) => catColor(d.cat))
       .attr('x', (d) => d.x)
       .attr('y', (d) => d.y)
-      .attr('text-anchor', 'middle').text((d) => d.cat);
+      .attr('text-anchor', (d) => d.anchor)
+      .text((d) => d.cat);
   }
 
   function applyFilter(filter) {
