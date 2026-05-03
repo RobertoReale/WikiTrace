@@ -603,7 +603,8 @@ const graphView = (() => {
     const labelPos = hullData.map((d) => ({
       cat: d.cat,
       x: d.nodes.reduce((s, n) => s + n.x, 0) / d.nodes.length,
-      y: Math.min(...d.nodes.map((n) => n.y)) - 28,
+      y: Math.min(...d.nodes.map((n) => n.y)) - 40,
+      minY: Math.min(...d.nodes.map((n) => n.y)) - 20,
     }));
 
     for (let iter = 0; iter < 20; iter++) {
@@ -621,6 +622,10 @@ const graphView = (() => {
             moved = true;
           }
         }
+      }
+      // Never push a category label below its own cluster's topmost node
+      for (const lp of labelPos) {
+        if (lp.y > lp.minY) lp.y = lp.minY;
       }
       if (!moved) break;
     }
