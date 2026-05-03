@@ -203,6 +203,8 @@ document.querySelectorAll('.tab').forEach((btn) => {
     $('panel-about').classList.toggle('hidden', currentTab !== 'about');
     document.querySelector('.sidebar').classList.toggle('hidden', currentTab === 'about');
     $('list-controls').style.display = currentTab === 'list' ? '' : 'none';
+    $('btn-export-svg').classList.toggle('hidden', currentTab !== 'graph');
+    $('btn-export-png').classList.toggle('hidden', currentTab !== 'graph');
     if (currentTab === 'graph') graphView.init(allPages);
   });
 });
@@ -266,6 +268,9 @@ $('btn-export').addEventListener('click', async () => {
   URL.revokeObjectURL(a.href);
 });
 
+$('btn-export-svg').addEventListener('click', () => exportGraph('svg'));
+$('btn-export-png').addEventListener('click', () => exportGraph('png'));
+
 $('btn-import').addEventListener('click', () => $('import-file-input').click());
 
 $('import-file-input').addEventListener('change', async (e) => {
@@ -292,6 +297,66 @@ $('import-file-input').addEventListener('change', async (e) => {
   };
   reader.readAsText(file);
 });
+
+function exportGraph(format) {
+  const svgEl = document.getElementById('graph-svg');
+  if (!svgEl || !graphView.built) { showIOToast('Build the graph first by switching to the Graph tab.', 'error'); return; }
+
+  const rootStyle = getComputedStyle(document.documentElement);
+  const resolve = (v) => rootStyle.getPropertyValue(v).trim();
+  const W = svgEl.clientWidth;
+  const H = svgEl.clientHeight;
+
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('width', W);
+  clone.setAttribute('height', H);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('width', W); bg.setAttribute('height', H);
+  bg.setAttribute('fill', resolve('--bg0'));
+  clone.insertBefore(bg, clone.firstChild);
+
+  const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  styleEl.textContent = [
+    `.node text{font-size:10px;fill:${resolve('--text')};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}`,
+    `.cluster-label{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;fill-opacity:.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}`,
+    `.link{stroke:#475569;stroke-opacity:0.4;} .link.chrono{stroke-dasharray:4 3;}`,
+  ].join('');
+  clone.insertBefore(styleEl, clone.firstChild);
+
+  const svgBlob = new Blob(
+    ['<?xml version="1.0" standalone="no"?>\n', new XMLSerializer().serializeToString(clone)],
+    { type: 'image/svg+xml;charset=utf-8' }
+  );
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  if (format === 'svg') {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(svgBlob);
+    a.download = `wikitrace-graph-${stamp}.svg`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return;
+  }
+
+  const blobUrl = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = W * 2; canvas.height = H * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(blobUrl);
+    const a = document.createElement('a');
+    a.download = `wikitrace-graph-${stamp}.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  };
+  img.onerror = () => URL.revokeObjectURL(blobUrl);
+  img.src = blobUrl;
+}
 
 function showIOToast(msg, type = 'success') {
   const el = $('io-toast');
@@ -534,11 +599,37 @@ const graphView = (() => {
       .attr('stroke-dasharray', '5,3')
       .attr('d', (d) => expandedHullPath(d.nodes.map((n) => [n.x, n.y]), 22));
 
-    gLabels.selectAll('.cluster-label').data(hullData, (d) => d.cat).join('text')
+    const LABEL_H = 14;
+    const labelPos = hullData.map((d) => ({
+      cat: d.cat,
+      x: d.nodes.reduce((s, n) => s + n.x, 0) / d.nodes.length,
+      y: Math.min(...d.nodes.map((n) => n.y)) - 28,
+    }));
+
+    for (let iter = 0; iter < 20; iter++) {
+      let moved = false;
+      for (let i = 0; i < labelPos.length; i++) {
+        for (let j = i + 1; j < labelPos.length; j++) {
+          const a = labelPos[i], b = labelPos[j];
+          const minSep = (a.cat.length + b.cat.length) * 3.5;
+          const dx = Math.abs(b.x - a.x);
+          const dy = Math.abs(b.y - a.y);
+          if (dx < minSep && dy < LABEL_H) {
+            const push = (LABEL_H - dy) / 2 + 1;
+            if (b.y >= a.y) { a.y -= push; b.y += push; }
+            else             { a.y += push; b.y -= push; }
+            moved = true;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+
+    gLabels.selectAll('.cluster-label').data(labelPos, (d) => d.cat).join('text')
       .attr('class', 'cluster-label')
       .attr('fill', (d) => catColor(d.cat))
-      .attr('x', (d) => d.nodes.reduce((s, n) => s + n.x, 0) / d.nodes.length)
-      .attr('y', (d) => Math.min(...d.nodes.map((n) => n.y)) - 28)
+      .attr('x', (d) => d.x)
+      .attr('y', (d) => d.y)
       .attr('text-anchor', 'middle').text((d) => d.cat);
   }
 

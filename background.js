@@ -133,6 +133,13 @@ function normalizeUrl(url) {
   } catch { return url; }
 }
 
+function extractSlug(url) {
+  try {
+    const m = new URL(url).pathname.match(/^\/wiki\/(.+)$/);
+    return m ? decodeURIComponent(m[1]).replace(/_/g, ' ') : null;
+  } catch { return null; }
+}
+
 function extractWikiInfo(url) {
   try {
     const u = new URL(url);
@@ -179,7 +186,10 @@ async function savePage({ url, title, parentId }) {
   if (!info) return null;
 
   const { pages = {} } = await storageGet('pages');
-  const existing = Object.values(pages).find((p) => p.url === normalUrl);
+  const slug = extractSlug(normalUrl);
+  const existing = Object.values(pages).find(
+    (p) => p.url === normalUrl || (slug && extractSlug(p.url) === slug)
+  );
   if (existing) return existing.id;
 
   const id = generateId();
@@ -288,11 +298,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'IMPORT_PAGES': {
         const { pages = {} } = await storageGet('pages');
         const existingUrls = new Set(Object.values(pages).map((p) => p.url));
+        const existingSlugs = new Set(Object.values(pages).map((p) => extractSlug(p.url)).filter(Boolean));
         let added = 0;
         for (const node of (msg.nodes || [])) {
           if (!node?.url || !node?.title) continue;
           const normalUrl = normalizeUrl(node.url);
-          if (existingUrls.has(normalUrl)) continue;
+          const slug = extractSlug(normalUrl);
+          if (existingUrls.has(normalUrl) || (slug && existingSlugs.has(slug))) continue;
           const id = node.id || generateId();
           pages[id] = {
             id, url: normalUrl, title: node.title,
@@ -302,6 +314,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             primaryCategory: node.primaryCategory || (node.categories?.[0] ?? null),
           };
           existingUrls.add(normalUrl);
+          if (slug) existingSlugs.add(slug);
           added++;
         }
         await storageSet({ pages, graphCacheDirty: true });
@@ -327,7 +340,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'GET_PAGE_STATUS': {
         const { pages = {} } = await storageGet('pages');
         const normalUrl = normalizeUrl(msg.url);
-        const found = Object.values(pages).find((p) => p.url === normalUrl);
+        const slug = extractSlug(normalUrl);
+        const found = Object.values(pages).find(
+          (p) => p.url === normalUrl || (slug && extractSlug(p.url) === slug)
+        );
         sendResponse({ saved: !!found, page: found || null });
         break;
       }
