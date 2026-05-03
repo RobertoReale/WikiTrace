@@ -600,6 +600,14 @@ const graphView = (() => {
       .attr('d', (d) => expandedHullPath(d.nodes.map((n) => [n.x, n.y]), 22));
 
     const LABEL_H = 14;
+    const HULL_PAD = 22;
+    const hullBBoxes = hullData.map((d) => ({
+      cat: d.cat,
+      minX: Math.min(...d.nodes.map((n) => n.x)) - HULL_PAD,
+      maxX: Math.max(...d.nodes.map((n) => n.x)) + HULL_PAD,
+      minY: Math.min(...d.nodes.map((n) => n.y)) - HULL_PAD,
+      maxY: Math.max(...d.nodes.map((n) => n.y)) + HULL_PAD,
+    }));
     const labelPos = hullData.map((d) => ({
       cat: d.cat,
       x: d.nodes.reduce((s, n) => s + n.x, 0) / d.nodes.length,
@@ -607,8 +615,9 @@ const graphView = (() => {
       minY: Math.min(...d.nodes.map((n) => n.y)) - 20,
     }));
 
-    for (let iter = 0; iter < 20; iter++) {
+    for (let iter = 0; iter < 30; iter++) {
       let moved = false;
+      // Phase 1: label vs label collision
       for (let i = 0; i < labelPos.length; i++) {
         for (let j = i + 1; j < labelPos.length; j++) {
           const a = labelPos[i], b = labelPos[j];
@@ -619,6 +628,32 @@ const graphView = (() => {
             const push = (LABEL_H - dy) / 2 + 1;
             if (b.y >= a.y) { a.y -= push; b.y += push; }
             else             { a.y += push; b.y -= push; }
+            moved = true;
+          }
+        }
+      }
+      // Phase 2: push labels out of foreign hull bounding boxes
+      for (let i = 0; i < labelPos.length; i++) {
+        const lp = labelPos[i];
+        const tw = lp.cat.length * 3.5;
+        for (let j = 0; j < hullBBoxes.length; j++) {
+          if (hullBBoxes[j].cat === lp.cat) continue;
+          const bb = hullBBoxes[j];
+          if (lp.x + tw > bb.minX && lp.x - tw < bb.maxX &&
+              lp.y + 4  > bb.minY && lp.y - LABEL_H < bb.maxY) {
+            const exitUp    = (lp.y + 4)  - bb.minY;
+            const exitDown  = bb.maxY - (lp.y - LABEL_H);
+            const exitLeft  = (lp.x + tw) - bb.minX;
+            const exitRight = bb.maxX - (lp.x - tw);
+            const minV = Math.min(exitUp, exitDown);
+            const minH = Math.min(exitLeft, exitRight);
+            if (minV <= minH) {
+              if (exitUp <= exitDown) lp.y -= exitUp + 2;
+              else                    lp.y += exitDown + 2;
+            } else {
+              if (exitLeft <= exitRight) lp.x -= exitLeft + 2;
+              else                       lp.x += exitRight + 2;
+            }
             moved = true;
           }
         }
