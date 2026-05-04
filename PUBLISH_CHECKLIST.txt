@@ -113,3 +113,106 @@ DONATION SETUP (already done in code)
 - Popup footer: PayPal.me/RobertoReale12
 - Dashboard About tab: yellow "Buy me a coffee" button
 - No code changes needed. Make sure your PayPal.me link is active and accepting payments.
+
+
+FUTURE FEATURE — ACCOUNT SYNC (Google Sign-In + Firebase)
+==========================================================
+Goal: let users log in with Google so their WikiTrace data survives reinstalls
+and syncs across devices (including Firefox for Android).
+
+Approach: Firebase Authentication + Firestore (free tier, no backend server needed).
+All code changes can be done in one focused coding session.
+
+STEP A — MANUAL SETUP (you must do these before coding)
+--------------------------------------------------------
+
+A1. Create a Firebase project
+    - Go to https://console.firebase.google.com → "Add project"
+    - Name it "wikitrace" (or similar), disable Google Analytics if you want,
+      then click "Create project".
+
+A2. Enable Google Sign-In
+    - In Firebase Console: Authentication → Sign-in method → Google → Enable.
+    - Set a support email (your Google account is fine).
+
+A3. Create a Firestore database
+    - In Firebase Console: Firestore Database → Create database.
+    - Choose "Start in production mode" (we'll add rules in the code step).
+    - Pick a region close to you (e.g. eur3 for Europe).
+
+A4. Register your Chrome extension as an OAuth client
+    - In Firebase Console: Project settings → General → Your apps → Add app →
+      Web app. Give it a name (e.g. "WikiTrace Extension") and click Register.
+      Copy the firebaseConfig object shown — you'll need it during coding.
+    - In Google Cloud Console (https://console.cloud.google.com) → APIs & Services
+      → Credentials → OAuth 2.0 Client IDs → find the auto-created Web client →
+      Add your extension's OAuth redirect URI:
+        https://<your-extension-id>.chromiumapp.org/
+      (Your extension ID is shown at chrome://extensions after loading unpacked.)
+
+A5. Note the values you'll paste into the code
+    - firebaseConfig object (from A4)
+    - OAuth Client ID (from A4, looks like XXXXXXXXXX.apps.googleusercontent.com)
+
+STEP B — CODE CHANGES (Claude does this in one prompt)
+------------------------------------------------------
+Feasible: YES — all changes stay inside the existing extension files.
+
+B1. Add Firebase SDK (Auth + Firestore) as local JS files (no npm needed, works
+    in MV3 service workers via importScripts or dynamic import).
+
+B2. background.js — add sync logic:
+    - On Google sign-in: merge local chrome.storage.local data into Firestore
+      (upload anything not already there).
+    - On every page save: write to Firestore in addition to chrome.storage.local.
+    - On extension install/first-run with existing account: pull data from
+      Firestore into chrome.storage.local.
+
+B3. popup.html / popup.js — add "Sign in with Google" button and user avatar/
+    email display when logged in, plus "Sign out" option.
+
+B4. manifest.json — add "identity" permission and Firebase domains to
+    host_permissions.
+
+B5. Firestore security rules — each user can only read/write their own data:
+      match /users/{userId}/pages/{pageId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+B6. Update privacy policy text to mention Firebase/Google cloud storage
+    (required by Chrome Web Store since data now leaves the browser).
+
+STEP C — FIREFOX / FIREFOX FOR ANDROID (separate coding session)
+-----------------------------------------------------------------
+Feasible: YES, but it is a distinct task from step B.
+
+C1. Add webextension-polyfill (browser.* API shim) so the extension runs on
+    both Chrome and Firefox.
+
+C2. Convert manifest.json to also support Firefox MV2 (Firefox for Android
+    currently runs MV2 extensions; MV3 support is in progress as of 2026).
+    Use a build step (e.g. a simple copy-and-patch script) to produce two
+    separate zips: one for Chrome MV3, one for Firefox MV2.
+
+C3. Replace chrome.identity.launchWebAuthFlow with browser.identity.
+    launchWebAuthFlow (works on Firefox desktop and Firefox for Android).
+
+C4. Submit to AMO (addons.mozilla.org):
+    - Create an account at https://addons.mozilla.org/developers/
+    - Submit the Firefox MV2 zip.
+    - AMO review is usually faster than Chrome Web Store (often < 24 hours for
+      listed add-ons, instant for self-hosted).
+
+C5. On Firefox for Android, verify:
+    - Install from AMO (Firefox for Android supports AMO-listed add-ons).
+    - Google Sign-In popup opens correctly via launchWebAuthFlow.
+    - Data syncs with data saved on desktop Chrome.
+
+PRIVACY POLICY UPDATE (required when cloud sync is added)
+---------------------------------------------------------
+When step B is done, the privacy policy must be updated to say:
+  "If you choose to sign in with Google, your WikiTrace data is stored in
+   Firebase Firestore (Google Cloud) associated with your Google account.
+   You can delete your account data at any time from the Settings page.
+   No data is shared with third parties or used for advertising."
+Update the public URL you submitted to the Chrome Web Store with this new text.
