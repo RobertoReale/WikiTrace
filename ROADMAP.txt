@@ -70,56 +70,111 @@ DOPO LA PUBBLICAZIONE
  2. FEATURE FUTURE
 ════════════════════════════════════════
 
-FEATURE A — READING LIST ("Da leggere")
+FEATURE A — READING LIST ("Da leggere")  ✅ IMPLEMENTATA
 -----------------------------------------
 Obiettivo: salvare pagine da leggere in futuro con categorie libere definite
 dall'utente (superiore ai preferiti del browser, tutto nel contesto WikiTrace).
 
 Funzionalità:
-  - Pulsante "Salva per dopo" nel popup (separato da "Salva visitato")
-  - Al salvataggio: scegli/crea una categoria utente (es. "Storia", "Da approfondire")
-  - Nuova tab "Da leggere" nella dashboard con:
-      • Lista filtrabile per categoria
-      • Badge "non letto" / "già visitato"
-      • Azione "Segna come letto" → sposta nella cronologia normale
-      • Azione "Rimuovi" senza tracciare
-  - Esportazione/importazione JSON include la reading list
+  [x] Pulsante "Salva per dopo" nel popup (separato da "Salva visitato")
+  [x] Al salvataggio: scegli/crea una categoria utente (es. "Storia", "Da approfondire")
+  [x] Nuova tab "Reading List" nella dashboard con:
+      [x] Lista filtrabile per categoria e ricerca testo
+      [x] Badge "Unread" / "Visited" (calcolato in tempo reale)
+      [x] Azione "✓ Read" → sposta nella cronologia normale
+      [x] Azione "×" Rimuovi senza tracciare
+  [x] Esportazione/importazione JSON include la reading list
+      (formato nuovo: { pages, readingList }; backward-compat con array plain)
 
 Approccio tecnico (no backend, tutto locale):
-  - Nuovo store: chrome.storage.local → readingList: [{ url, title, category, savedAt }]
-  - Nuova tab in dashboard.html / dashboard.js
-  - Nessuna modifica a manifest.json necessaria
+  [x] Nuovo store: chrome.storage.local → readingList: { [id]: { url, title, userCategory, savedAt } }
+  [x] Nuova tab in dashboard.html / dashboard.js
+  [x] Nessuna modifica a manifest.json necessaria
+
+FEATURE B — ICONA "GIÀ VISITATO"  ✅ IMPLEMENTATA
+--------------------------------------------------
+Obiettivo: avvisare visivamente l'utente quando apre una pagina che ha già
+visitato in passato, mostrando un'icona diversa da quella verde standard.
+La funzione può essere disattivata dall'utente con un click sull'icona
+dell'estensione (toggle on/off visibile nel popup).
+
+Funzionalità:
+  [x] Quando l'utente apre una pagina già presente nell'archivio:
+      [x] L'icona della toolbar diventa arancione (icon_revisit16/48/128.png)
+      [x] Il popup mostra data di salvataggio e numero di visite per quella pagina
+  [x] Toggle "Revisit icon" nel popup (switch on/off):
+      [x] Attivo (default): icona arancione per pagine già viste
+      [x] Disattivo: comportamento uniforme (resetIcon al default)
+  [x] Lo stato del toggle salvato in chrome.storage.local (persiste tra sessioni)
+  [x] Su pagine mai visitate il comportamento resta invariato (resetIcon + badge)
+  [x] visitCount tracciato per ogni pagina (incrementato ad ogni navigazione)
+
+Approccio tecnico:
+  [x] background.js: handleNavCompleted legge pages + settings in un'unica
+      storageGet, individua se existing; se sì incrementa visitCount e chiama
+      setRevisitIcon / resetIcon; se no segue il flusso normale (savePage + badge)
+  [x] Icone arancioni (icon_revisit16/48/128.png) generate in icons/ via PowerShell
+  [x] popup.js: legge e scrive il flag "revisitNotify" in chrome.storage.local
+  [x] Nessuna modifica a manifest.json necessaria
 
 
-FEATURE B — ACCOUNT SYNC (Google Sign-In + Firebase)
+FEATURE C — TRACCIAMENTO SITI PERSONALIZZATI
+---------------------------------------------
+Obiettivo: estendere il tracciamento a qualsiasi sito web scelto dall'utente,
+non solo Wikipedia. Ogni sito avrà il proprio archivio, grafo, statistiche
+e filtri separati, esattamente come avviene oggi per Wikipedia.
+
+Funzionalità:
+  - Nuova sezione "Siti tracciati" nelle Impostazioni della dashboard:
+      • Elenco dei domini attivi (Wikipedia già presente di default)
+      • Pulsante "Aggiungi sito" → l'utente inserisce un dominio (es. britannica.com)
+      • Pulsante "Rimuovi" per ogni sito (con conferma, i dati vengono cancellati)
+  - Per ogni sito aggiunto:
+      • Archivio visite indipendente in chrome.storage.local
+      • Grafo di navigazione separato nella dashboard
+      • Tab dedicata nella dashboard (o selettore a tendina per scegliere il sito)
+      • Statistiche (pagine visitate, connessioni, categorie) per dominio
+  - Il popup mostra a quale sito tracciato appartiene la pagina corrente
+  - Esportazione/importazione JSON include tutti i siti e i relativi dati
+
+Approccio tecnico:
+  - chrome.storage.local: struttura a namespace per dominio
+      { sites: { "en.wikipedia.org": { pages: [...] }, "britannica.com": { pages: [...] } } }
+  - manifest.json: host_permissions generici (<all_urls> oppure richiesti dinamicamente
+    con chrome.permissions.request al momento dell'aggiunta del sito)
+  - background.js: controlla se il dominio della pagina corrente è nella lista attiva
+  - dashboard: componente riusabile "SiteView" parametrizzato per dominio
+
+
+FEATURE D — ACCOUNT SYNC (Google Sign-In + Firebase)
 ------------------------------------------------------
 Obiettivo: i dati sopravvivono alla reinstallazione e si sincronizzano tra
 dispositivi (incluso Firefox per Android).
 Stack: Firebase Authentication + Firestore (free tier, nessun server proprio).
 
 Passo 1 — Setup manuale (da fare tu)
-  B1. Crea un progetto Firebase su https://console.firebase.google.com
-  B2. Abilita Google Sign-In: Authentication → Sign-in method → Google
-  B3. Crea un database Firestore (production mode, regione eur3)
-  B4. Registra l'estensione come Web App → copia firebaseConfig
+  D1. Crea un progetto Firebase su https://console.firebase.google.com
+  D2. Abilita Google Sign-In: Authentication → Sign-in method → Google
+  D3. Crea un database Firestore (production mode, regione eur3)
+  D4. Registra l'estensione come Web App → copia firebaseConfig
       Aggiungi l'URI di redirect OAuth in Google Cloud Console:
         https://<extension-id>.chromiumapp.org/
-  B5. Annota: firebaseConfig e OAuth Client ID
+  D5. Annota: firebaseConfig e OAuth Client ID
 
 Passo 2 — Modifiche al codice (una sessione)
-  B6. Aggiungi Firebase SDK (Auth + Firestore) come file JS locali
-  B7. background.js: sync al login, ad ogni salvataggio e al primo avvio
-  B8. popup.html/js: pulsante "Sign in with Google", avatar utente, sign out
-  B9. manifest.json: permesso "identity" + domini Firebase in host_permissions
-  B10. Regole Firestore: ogni utente legge/scrive solo i propri dati
-  B11. Aggiorna la Privacy Policy per menzionare Firebase/Google Cloud
+  D6. Aggiungi Firebase SDK (Auth + Firestore) come file JS locali
+  D7. background.js: sync al login, ad ogni salvataggio e al primo avvio
+  D8. popup.html/js: pulsante "Sign in with Google", avatar utente, sign out
+  D9. manifest.json: permesso "identity" + domini Firebase in host_permissions
+  D10. Regole Firestore: ogni utente legge/scrive solo i propri dati
+  D11. Aggiorna la Privacy Policy per menzionare Firebase/Google Cloud
        (obbligatorio per il Chrome Web Store quando i dati lasciano il browser)
 
 
-FEATURE C — FIREFOX & FIREFOX FOR ANDROID (sessione separata)
+FEATURE E — FIREFOX & FIREFOX FOR ANDROID (sessione separata)
 --------------------------------------------------------------
-  C1. Aggiungi webextension-polyfill (shim browser.* API)
-  C2. Crea un secondo manifest per Firefox MV2 + script di build per due zip separati
-  C3. Sostituisci chrome.identity con browser.identity per il login Google
-  C4. Pubblica su AMO (addons.mozilla.org) — review spesso < 24 ore
-  C5. Verifica su Firefox for Android: login, salvataggio e sync con Chrome
+  E1. Aggiungi webextension-polyfill (shim browser.* API)
+  E2. Crea un secondo manifest per Firefox MV2 + script di build per due zip separati
+  E3. Sostituisci chrome.identity con browser.identity per il login Google
+  E4. Pubblica su AMO (addons.mozilla.org) — review spesso < 24 ore
+  E5. Verifica su Firefox for Android: login, salvataggio e sync con Chrome

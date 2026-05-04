@@ -17,6 +17,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="list">List</button>
       <button class="tab" data-tab="graph">Graph</button>
+      <button class="tab" data-tab="readinglist">Reading List</button>
       <button class="tab" data-tab="about">About</button>
     </div>
     <button class="btn-theme" id="btn-theme" title="Toggle theme">☀</button>
@@ -44,16 +45,26 @@
         </div>
       </div>
 
-      <div class="sidebar-section">
+      <div class="sidebar-section" id="cat-filter-section">
         <h3>Categories</h3>
         <div class="cat-list" id="cat-filter-list"></div>
       </div>
 
-      <div class="sidebar-section add-panel">
+      <div class="sidebar-section add-panel" id="add-url-section">
         <h3>Add URLs (batch)</h3>
         <textarea id="add-urls-input" placeholder="One Wikipedia URL per line&#10;https://en.wikipedia.org/wiki/…"></textarea>
         <button class="btn-add" id="btn-add-urls">Add</button>
         <div id="add-msg"></div>
+      </div>
+
+      <div class="sidebar-section hidden" id="rl-controls">
+        <h3>Search</h3>
+        <input type="search" class="filter-input" id="rl-search-input" placeholder="Filter reading list…">
+      </div>
+
+      <div class="sidebar-section hidden" id="rl-cat-section">
+        <h3>My categories</h3>
+        <div class="cat-list" id="rl-cat-filter-list"></div>
       </div>
 
     </div>
@@ -129,6 +140,10 @@
         <p class="about-footer-line">Built with care by Roberto &mdash; open-source, no tracking, no ads.</p>
 
       </div>
+    </div>
+
+    <div class="panel hidden" id="panel-readinglist">
+      <div class="list-view" id="rl-view"></div>
     </div>
 
   </div>

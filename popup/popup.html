@@ -119,6 +119,71 @@
 
     #status-msg { padding: 0 14px 10px; font-size: 11px; color: var(--success); min-height: 20px; }
 
+    .btn-save-later {
+      display: block; width: calc(100% - 28px); margin: 6px 14px 0;
+      padding: 7px; border: 1px solid var(--accent); border-radius: 6px;
+      background: transparent; color: var(--accent); font-size: 13px;
+      font-weight: 600; cursor: pointer; transition: background .15s, color .15s;
+    }
+    .btn-save-later:hover:not(:disabled) { background: var(--accent); color: #fff; }
+    .btn-save-later:disabled { border-color: var(--border); color: var(--text3); cursor: default; }
+
+    .rl-picker {
+      margin: 8px 14px 0; padding: 10px;
+      background: var(--bg1); border: 1px solid var(--border); border-radius: 6px;
+    }
+    .rl-picker-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--text3); margin-bottom: 6px;
+    }
+    .rl-input {
+      width: 100%; padding: 6px 8px; background: var(--bg0);
+      border: 1px solid var(--border); border-radius: 5px;
+      color: var(--text); font-size: 12px; outline: none;
+    }
+    .rl-input:focus { border-color: var(--accent); }
+    .rl-cats { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+    .rl-cat-pill {
+      padding: 2px 8px; border-radius: 10px; font-size: 10px;
+      background: var(--bg0); border: 1px solid var(--border);
+      color: var(--text2); cursor: pointer; transition: border-color .1s, color .1s;
+    }
+    .rl-cat-pill:hover { border-color: var(--accent); color: var(--accent); }
+    .rl-picker-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .rl-btn-cancel {
+      flex: 1; padding: 5px; border: 1px solid var(--border); border-radius: 5px;
+      background: none; color: var(--text2); font-size: 12px; cursor: pointer;
+    }
+    .rl-btn-cancel:hover { color: var(--text); border-color: var(--text2); }
+    .rl-btn-confirm {
+      flex: 2; padding: 5px; border: none; border-radius: 5px;
+      background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .rl-btn-confirm:hover { background: var(--accent-hover); }
+
+    .page-revisit-info {
+      margin-top: 5px; font-size: 11px; color: var(--text3);
+    }
+
+    .settings-row {
+      display: flex; align-items: center;
+      justify-content: space-between; color: var(--text2); font-size: 12px;
+      margin-top: 8px;
+    }
+    .toggle { position: relative; display: inline-block; width: 32px; height: 18px; cursor: pointer; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-track {
+      position: absolute; inset: 0;
+      background: var(--border); border-radius: 9px; transition: background .2s;
+    }
+    .toggle-track::before {
+      content: ''; position: absolute;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #fff; top: 3px; left: 3px; transition: transform .2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--accent); }
+    .toggle input:checked + .toggle-track::before { transform: translateX(14px); }
+
     .donate-footer {
       border-top: 1px solid var(--border);
       padding: 9px 14px;
@@ -145,9 +210,21 @@
     <div class="page-label">Current page</div>
     <div class="page-title" id="page-title"><span class="not-wiki">Not a Wikipedia page</span></div>
     <div class="page-cats" id="page-cats"></div>
+    <div class="page-revisit-info hidden" id="page-revisit-info"></div>
   </div>
 
   <button class="btn-save" id="btn-save" disabled>Save this page</button>
+  <button class="btn-save-later" id="btn-save-later" disabled>🔖 Save for later</button>
+
+  <div class="rl-picker hidden" id="rl-picker">
+    <div class="rl-picker-label">Category</div>
+    <input type="text" class="rl-input" id="rl-category-input" placeholder="e.g. History, Science…">
+    <div class="rl-cats" id="rl-existing-cats"></div>
+    <div class="rl-picker-actions">
+      <button class="rl-btn-cancel" id="rl-cancel">Cancel</button>
+      <button class="rl-btn-confirm" id="rl-confirm">Save to list</button>
+    </div>
+  </div>
 
   <div class="stats">
     <div class="stat">
@@ -173,6 +250,13 @@
         <option value="manual">Manual only</option>
       </select>
     </label>
+    <div class="settings-row">
+      Revisit icon
+      <label class="toggle" title="Show orange icon when you open a previously saved page">
+        <input type="checkbox" id="revisit-notify">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
   </div>
 
   <div id="status-msg"></div>

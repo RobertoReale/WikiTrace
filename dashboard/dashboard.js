@@ -33,11 +33,20 @@ let sortKey = 'date-desc';
 let searchQuery = '';
 let currentTab = 'list';
 
+let allReadingList = [];
+let rlSearchQuery = '';
+let rlActiveCategory = null;
+
 // ─── Data loading ─────────────────────────────────────────────────────────────
 
 async function loadPages() {
   const { pages } = await send('GET_PAGES');
   allPages = pages.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+async function loadReadingList() {
+  const { readingList } = await send('GET_READING_LIST');
+  allReadingList = (readingList || []).sort((a, b) => b.savedAt - a.savedAt);
 }
 
 function getCategories() {
@@ -93,6 +102,138 @@ function renderCategoryFilter() {
     });
     container.appendChild(el);
   }
+}
+
+// ─── Reading list helpers ─────────────────────────────────────────────────────
+
+function getRLCategories() {
+  const counts = {};
+  for (const r of allReadingList) {
+    const c = r.userCategory || 'General';
+    counts[c] = (counts[c] || 0) + 1;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+function renderRLCategoryFilter() {
+  const cats = getRLCategories();
+  if (rlActiveCategory === undefined) rlActiveCategory = null;
+
+  const container = $('rl-cat-filter-list');
+  container.innerHTML = '';
+
+  if (cats.length === 0) {
+    container.innerHTML = '<span style="color:var(--text3);font-size:11px;">No categories yet</span>';
+    return;
+  }
+
+  const allEl = document.createElement('div');
+  allEl.className = 'cat-item' + (rlActiveCategory === null ? ' active' : '');
+  allEl.innerHTML = '<span class="cat-name">All</span>';
+  allEl.addEventListener('click', () => { rlActiveCategory = null; renderRLCategoryFilter(); renderReadingList(); });
+  container.appendChild(allEl);
+
+  for (const [cat, count] of cats) {
+    const el = document.createElement('div');
+    el.className = 'cat-item' + (rlActiveCategory === cat ? ' active' : '');
+
+    const dot = document.createElement('span');
+    dot.className = 'cat-dot';
+    dot.style.background = catColor(cat);
+
+    const name = document.createElement('span');
+    name.className = 'cat-name';
+    name.title = cat;
+    name.textContent = cat;
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'cat-count';
+    countSpan.textContent = count;
+
+    el.append(dot, name, countSpan);
+    el.addEventListener('click', () => {
+      rlActiveCategory = rlActiveCategory === cat ? null : cat;
+      renderRLCategoryFilter();
+      renderReadingList();
+    });
+    container.appendChild(el);
+  }
+}
+
+function renderReadingList() {
+  const container = $('rl-view');
+  const visitedUrls = new Set(allPages.map((p) => p.url));
+  const q = rlSearchQuery.toLowerCase();
+
+  const items = allReadingList.filter((r) => {
+    if (rlActiveCategory && r.userCategory !== rlActiveCategory) return false;
+    if (q && !r.title.toLowerCase().includes(q) && !(r.userCategory || '').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>${allReadingList.length === 0 ? 'Your reading list is empty.' : 'No results match your filter.'}</p>
+        <small>${allReadingList.length === 0 ? 'Use "Save for later" in the popup to add pages.' : 'Try adjusting your search or category filter.'}</small>
+      </div>`;
+    return;
+  }
+
+  const rows = items.map((r) => {
+    const visited = visitedUrls.has(r.url);
+    const badge = visited
+      ? '<span class="rl-badge rl-badge-visited">Visited</span>'
+      : '<span class="rl-badge rl-badge-unread">Unread</span>';
+    const cat = r.userCategory || 'General';
+    const color = catColor(cat);
+    const bg = color.replace('hsl(', 'hsla(').replace(')', ',0.15)');
+    return `
+      <tr data-rl-id="${r.id}">
+        <td class="col-title"><a href="${r.url}" target="_blank">${escHtml(r.title)}</a></td>
+        <td class="col-date">${formatDate(r.savedAt)}</td>
+        <td class="col-cat"><span class="cat-pill" style="color:${color};background:${bg}">${escHtml(cat)}</span></td>
+        <td class="col-cat">${badge}</td>
+        <td class="col-actions">
+          <button class="rl-mark-read" data-rl-read="${r.id}" title="Mark as read">✓ Read</button>
+          <button class="rl-remove" data-rl-del="${r.id}" title="Remove">&times;</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Title</th><th>Saved</th><th>Category</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  container.querySelectorAll('[data-rl-read]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.rlRead;
+      await send('MARK_AS_READ', { id });
+      allReadingList = allReadingList.filter((r) => r.id !== id);
+      await loadPages();
+      renderStats();
+      renderReadingList();
+    });
+  });
+
+  container.querySelectorAll('[data-rl-del]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.rlDel;
+      await send('REMOVE_FROM_READING_LIST', { id });
+      allReadingList = allReadingList.filter((r) => r.id !== id);
+      renderRLCategoryFilter();
+      renderReadingList();
+    });
+  });
+}
+
+function renderRLStats() {
+  $('topbar-stats').textContent =
+    `${allReadingList.length} item${allReadingList.length !== 1 ? 's' : ''} · ${getRLCategories().length} categories`;
 }
 
 // ─── Stats bar ────────────────────────────────────────────────────────────────
@@ -201,12 +342,29 @@ document.querySelectorAll('.tab').forEach((btn) => {
     $('panel-list').classList.toggle('hidden', currentTab !== 'list');
     $('panel-graph').classList.toggle('hidden', currentTab !== 'graph');
     $('panel-about').classList.toggle('hidden', currentTab !== 'about');
+    $('panel-readinglist').classList.toggle('hidden', currentTab !== 'readinglist');
     document.querySelector('.sidebar').classList.toggle('hidden', currentTab === 'about');
     $('list-controls').style.display = currentTab === 'list' ? '' : 'none';
+    $('cat-filter-section').classList.toggle('hidden', currentTab === 'readinglist');
+    $('add-url-section').classList.toggle('hidden', currentTab === 'readinglist');
+    $('rl-controls').classList.toggle('hidden', currentTab !== 'readinglist');
+    $('rl-cat-section').classList.toggle('hidden', currentTab !== 'readinglist');
     $('btn-export-svg').classList.toggle('hidden', currentTab !== 'graph');
     $('btn-export-png').classList.toggle('hidden', currentTab !== 'graph');
     if (currentTab === 'graph') graphView.init(allPages);
+    if (currentTab === 'readinglist') {
+      renderRLStats();
+      renderRLCategoryFilter();
+      renderReadingList();
+    } else {
+      renderStats();
+    }
   });
+});
+
+$('rl-search-input').addEventListener('input', (e) => {
+  rlSearchQuery = e.target.value;
+  renderReadingList();
 });
 
 // ─── Add URLs ─────────────────────────────────────────────────────────────────
@@ -233,7 +391,7 @@ $('btn-add-urls').addEventListener('click', async () => {
   if (resp?.ok) {
     $('add-urls-input').value = '';
     $('add-msg').style.color = 'var(--success)';
-    $('add-msg').textContent = `Added ${resp.results.length} page(s).`;
+    $('add-msg').textContent = `Added ${resp.added} new page(s).`;
     setTimeout(() => { $('add-msg').textContent = ''; }, 3000);
     await loadPages();
     renderStats();
@@ -246,21 +404,29 @@ $('btn-add-urls').addEventListener('click', async () => {
 // ─── Clear all ────────────────────────────────────────────────────────────────
 
 $('btn-clear').addEventListener('click', async () => {
-  if (!confirm('Delete all saved pages? This cannot be undone.')) return;
+  if (!confirm('Delete all saved pages and reading list? This cannot be undone.')) return;
   await send('CLEAR_ALL');
+  localStorage.removeItem('wt-positions');
   allPages = [];
+  allReadingList = [];
   activeCategories = null;
+  rlActiveCategory = null;
   graphView.clear();
   renderStats();
   renderCategoryFilter();
   renderList();
+  if (currentTab === 'readinglist') { renderRLCategoryFilter(); renderReadingList(); }
 });
 
 // ─── Import / Export ──────────────────────────────────────────────────────────
 
 $('btn-export').addEventListener('click', async () => {
-  const { pages } = await send('GET_PAGES');
-  const blob = new Blob([JSON.stringify(pages, null, 2)], { type: 'application/json' });
+  const [{ pages }, { readingList }] = await Promise.all([
+    send('GET_PAGES'),
+    send('GET_READING_LIST'),
+  ]);
+  const data = { pages, readingList: readingList || [] };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `wikitrace-${new Date().toISOString().slice(0, 10)}.json`;
@@ -279,12 +445,14 @@ $('import-file-input').addEventListener('change', async (e) => {
   const reader = new FileReader();
   reader.onload = async (ev) => {
     try {
-      const nodes = JSON.parse(ev.target.result);
-      if (!Array.isArray(nodes)) throw new Error('Expected array');
-      const resp = await send('IMPORT_PAGES', { nodes });
+      const parsed = JSON.parse(ev.target.result);
+      const nodes = Array.isArray(parsed) ? parsed : (parsed.pages || []);
+      const readingListItems = Array.isArray(parsed) ? [] : (parsed.readingList || []);
+      const resp = await send('IMPORT_PAGES', { nodes, readingListItems });
       if (resp?.ok) {
-        showIOToast(`Imported ${resp.added} new page(s).`);
-        await loadPages();
+        const rlMsg = resp.addedRL > 0 ? `, ${resp.addedRL} reading list item(s)` : '';
+        showIOToast(`Imported ${resp.added} new page(s)${rlMsg}.`);
+        await Promise.all([loadPages(), loadReadingList()]);
         renderStats();
         renderCategoryFilter();
         renderList();
@@ -749,7 +917,7 @@ $('btn-theme').addEventListener('click', async () => {
 (async () => {
   const { settings } = await send('GET_SETTINGS');
   applyTheme(settings.theme ?? 'dark');
-  await loadPages();
+  await Promise.all([loadPages(), loadReadingList()]);
   renderStats();
   renderCategoryFilter();
   renderList();

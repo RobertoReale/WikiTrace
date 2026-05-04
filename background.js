@@ -25,10 +25,11 @@ let queueTimer = null;
 // ─── onInstalled ──────────────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(['pages', 'settings'], (res) => {
+  chrome.storage.local.get(['pages', 'settings', 'readingList'], (res) => {
     const updates = {};
     if (!res.pages) updates.pages = {};
     if (!res.settings) updates.settings = { saveMode: 'auto' };
+    if (!res.readingList) updates.readingList = {};
     if (Object.keys(updates).length > 0) chrome.storage.local.set(updates);
   });
 });
@@ -47,7 +48,7 @@ function storageSet(data) {
   );
 }
 
-// ─── Badge feedback ───────────────────────────────────────────────────────────
+// ─── Badge & icon feedback ────────────────────────────────────────────────────
 
 function showBadge(tabId) {
   if (!tabId) return;
@@ -60,6 +61,22 @@ function showBadge(tabId) {
       }
     });
   }, 2000);
+}
+
+function setRevisitIcon(tabId) {
+  if (!tabId) return;
+  chrome.action.setIcon({
+    path: { 16: 'icons/icon_revisit16.png', 48: 'icons/icon_revisit48.png', 128: 'icons/icon_revisit128.png' },
+    tabId,
+  });
+}
+
+function resetIcon(tabId) {
+  if (!tabId) return;
+  chrome.action.setIcon({
+    path: { 16: 'icons/icon16.png', 48: 'icons/icon48.png', 128: 'icons/icon128.png' },
+    tabId,
+  });
 }
 
 // ─── Wikipedia category API + queue ──────────────────────────────────────────
@@ -200,6 +217,7 @@ async function savePage({ url, title, parentId }) {
     parentId: parentId || null,
     categories: [],
     primaryCategory: null,
+    visitCount: 1,
   };
 
   pages[id] = entry;
@@ -228,8 +246,29 @@ async function handleNavCompleted(details) {
   const { tabId, url } = details;
   if (!extractWikiInfo(url)) return;
 
-  const { settings = {} } = await storageGet('settings');
+  const { settings = {}, pages = {} } = await storageGet(['settings', 'pages']);
   const mode = settings.saveMode ?? 'auto';
+  const revisitNotify = settings.revisitNotify ?? true;
+
+  // Check if this URL was already saved
+  const normalUrl = normalizeUrl(url);
+  const slug = extractSlug(normalUrl);
+  const existing = Object.values(pages).find(
+    (p) => p.url === normalUrl || (slug && extractSlug(p.url) === slug)
+  );
+
+  if (existing) {
+    // Increment visit counter and show revisit icon
+    pages[existing.id].visitCount = (pages[existing.id].visitCount || 1) + 1;
+    await storageSet({ pages });
+    if (revisitNotify) setRevisitIcon(tabId); else resetIcon(tabId);
+    tabState[tabId] = { pageId: existing.id, url };
+    return;
+  }
+
+  // New page — reset any lingering revisit icon
+  resetIcon(tabId);
+
   const fallbackParentId = tabState[tabId]?.pageId ?? null;
   const parentId = await getReferrerId(tabId, fallbackParentId);
   const hintTitle = tabState[tabId]?.pendingTitle ?? null;
@@ -280,18 +319,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const url = msg.url || state.pendingUrl;
         if (!url) { sendResponse({ ok: false, error: 'No URL' }); return; }
         const id = await savePage({ url, title: msg.title || null, parentId: state.pendingParentId ?? null });
-        if (id && tabId != null) { tabState[tabId] = { pageId: id, url }; showBadge(tabId); }
+        if (!id) { sendResponse({ ok: false, error: 'Not a Wikipedia page' }); return; }
+        if (tabId != null) { tabState[tabId] = { pageId: id, url }; showBadge(tabId); }
         sendResponse({ ok: true, id });
         break;
       }
 
       case 'ADD_URLS': {
+        const { pages: existingPages = {} } = await storageGet('pages');
+        const existingUrls = new Set(Object.values(existingPages).map((p) => p.url));
         const results = [];
+        let added = 0;
         for (const entry of msg.entries) {
+          const normalUrl = normalizeUrl(entry.url);
           const id = await savePage({ url: entry.url, title: entry.title || null, parentId: null });
           results.push({ url: entry.url, id });
+          if (id && !existingUrls.has(normalUrl)) added++;
         }
-        sendResponse({ ok: true, results });
+        sendResponse({ ok: true, results, added });
         break;
       }
 
@@ -318,7 +363,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           added++;
         }
         await storageSet({ pages, graphCacheDirty: true });
-        sendResponse({ ok: true, added });
+
+        let addedRL = 0;
+        if (Array.isArray(msg.readingListItems) && msg.readingListItems.length > 0) {
+          const { readingList = {} } = await storageGet('readingList');
+          const existingRLUrls = new Set(Object.values(readingList).map((r) => r.url));
+          for (const item of msg.readingListItems) {
+            if (!item?.url || !item?.title) continue;
+            const normalUrl = normalizeUrl(item.url);
+            if (existingRLUrls.has(normalUrl)) continue;
+            const rlId = item.id || generateId();
+            readingList[rlId] = {
+              id: rlId, url: normalUrl, title: item.title,
+              userCategory: item.userCategory || 'General',
+              savedAt: item.savedAt || Date.now(),
+            };
+            existingRLUrls.add(normalUrl);
+            addedRL++;
+          }
+          await storageSet({ readingList });
+        }
+
+        sendResponse({ ok: true, added, addedRL });
         break;
       }
 
@@ -338,13 +404,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'GET_PAGE_STATUS': {
-        const { pages = {} } = await storageGet('pages');
+        const { pages = {}, readingList = {} } = await storageGet(['pages', 'readingList']);
         const normalUrl = normalizeUrl(msg.url);
         const slug = extractSlug(normalUrl);
         const found = Object.values(pages).find(
           (p) => p.url === normalUrl || (slug && extractSlug(p.url) === slug)
         );
-        sendResponse({ saved: !!found, page: found || null });
+        const inReadingList = Object.values(readingList).find((r) => r.url === normalUrl) || null;
+        sendResponse({ saved: !!found, page: found || null, inReadingList });
         break;
       }
 
@@ -371,8 +438,49 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       }
 
+      case 'GET_READING_LIST': {
+        const { readingList = {} } = await storageGet('readingList');
+        sendResponse({ readingList: Object.values(readingList) });
+        break;
+      }
+
+      case 'ADD_TO_READING_LIST': {
+        const { readingList = {} } = await storageGet('readingList');
+        const normalUrl = normalizeUrl(msg.url);
+        const existing = Object.values(readingList).find((r) => r.url === normalUrl);
+        if (existing) { sendResponse({ ok: true, id: existing.id, alreadyExists: true }); return; }
+        const id = generateId();
+        readingList[id] = {
+          id, url: normalUrl, title: msg.title || '',
+          userCategory: msg.userCategory || 'General',
+          savedAt: Date.now(),
+        };
+        await storageSet({ readingList });
+        sendResponse({ ok: true, id });
+        break;
+      }
+
+      case 'REMOVE_FROM_READING_LIST': {
+        const { readingList = {} } = await storageGet('readingList');
+        delete readingList[msg.id];
+        await storageSet({ readingList });
+        sendResponse({ ok: true });
+        break;
+      }
+
+      case 'MARK_AS_READ': {
+        const { readingList = {} } = await storageGet('readingList');
+        const item = readingList[msg.id];
+        if (!item) { sendResponse({ ok: false, error: 'Not found' }); return; }
+        delete readingList[msg.id];
+        await storageSet({ readingList });
+        const pageId = await savePage({ url: item.url, title: item.title, parentId: null });
+        sendResponse({ ok: true, pageId });
+        break;
+      }
+
       case 'CLEAR_ALL': {
-        await storageSet({ pages: {}, graphPositions: {}, graphCacheDirty: true });
+        await storageSet({ pages: {}, graphPositions: {}, graphCacheDirty: true, readingList: {} });
         sendResponse({ ok: true });
         break;
       }
