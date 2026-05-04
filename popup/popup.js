@@ -44,7 +44,19 @@ async function loadStats() {
 
 async function loadCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !isWikiUrl(tab.url)) return;
+  if (!tab) return;
+
+  if (!isWikiUrl(tab.url)) {
+    // Check if this domain is a custom tracked site
+    const { sites = [] } = await send('GET_TRACKED_SITES');
+    if (sites.length > 0) {
+      let hostname;
+      try { hostname = new URL(tab.url).hostname; } catch { return; }
+      const site = sites.find((s) => hostname === s.domain || hostname.endsWith('.' + s.domain));
+      if (site) await loadCustomSiteTab(tab, site);
+    }
+    return;
+  }
 
   const titleEl = $('page-title');
   const catsEl = $('page-cats');
@@ -104,6 +116,58 @@ async function loadCurrentTab() {
     btnSaveLater.disabled = false;
     btnSaveLater.onclick = () => showRLPicker(tab);
   }
+}
+
+// ── Custom site tab ───────────────────────────────────────────────────────────
+
+async function loadCustomSiteTab(tab, site) {
+  const titleEl = $('page-title');
+  const catsEl = $('page-cats');
+  const btnSave = $('btn-save');
+  const btnSaveLater = $('btn-save-later');
+
+  titleEl.textContent = tab.title || site.domain;
+  catsEl.textContent = site.name || site.domain;
+
+  const { saved, page } = await send('GET_CSITE_PAGE_STATUS', { domain: site.domain, url: tab.url });
+
+  if (saved) {
+    titleEl.insertAdjacentHTML('beforeend', ' <span class="badge badge-saved">Saved</span>');
+    if (page?.timestamp) {
+      const date = new Date(page.timestamp).toLocaleDateString();
+      const visits = page.visitCount || 1;
+      const revisitEl = $('page-revisit-info');
+      revisitEl.textContent = `Saved ${date} · ${visits} visit${visits === 1 ? '' : 's'}`;
+      revisitEl.classList.remove('hidden');
+    }
+    btnSave.disabled = true;
+    btnSave.textContent = '✓ Already saved';
+  } else {
+    titleEl.insertAdjacentHTML('beforeend', ' <span class="badge badge-unsaved">Not saved</span>');
+    btnSave.disabled = false;
+    btnSave.textContent = 'Save this page';
+    btnSave.onclick = async () => {
+      btnSave.disabled = true;
+      btnSave.textContent = 'Saving…';
+      const resp = await send('MANUAL_SAVE_CSITE', {
+        tabId: tab.id, domain: site.domain, url: tab.url, title: tab.title,
+      });
+      if (resp?.ok) {
+        flash('Saved!');
+        btnSave.textContent = '✓ Saved';
+        titleEl.querySelector('.badge').className = 'badge badge-saved';
+        titleEl.querySelector('.badge').textContent = 'Saved';
+        await loadStats();
+      } else {
+        flash('Error saving page', '#f87171');
+        btnSave.disabled = false;
+        btnSave.textContent = 'Save this page';
+      }
+    };
+  }
+
+  // Reading list not supported for custom sites
+  btnSaveLater.classList.add('hidden');
 }
 
 // ── Reading-list picker ───────────────────────────────────────────────────────

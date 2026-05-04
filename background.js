@@ -21,15 +21,17 @@ const NOISE_RE = [
 const tabState = {};
 const apiQueue = [];
 let queueTimer = null;
+let cachedTrackedSites = null;
 
 // ─── onInstalled ──────────────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(['pages', 'settings', 'readingList'], (res) => {
+  chrome.storage.local.get(['pages', 'settings', 'readingList', 'trackedSites'], (res) => {
     const updates = {};
     if (!res.pages) updates.pages = {};
     if (!res.settings) updates.settings = { saveMode: 'auto' };
     if (!res.readingList) updates.readingList = {};
+    if (!res.trackedSites) updates.trackedSites = [];
     if (Object.keys(updates).length > 0) chrome.storage.local.set(updates);
   });
 });
@@ -170,8 +172,46 @@ function extractWikiInfo(url) {
   } catch { return null; }
 }
 
+function getDomain(url) {
+  try { return new URL(url).hostname; }
+  catch { return null; }
+}
+
+function matchesSite(site, url) {
+  const hostname = getDomain(url);
+  if (!hostname) return false;
+  return hostname === site.domain || hostname.endsWith('.' + site.domain);
+}
+
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ─── Custom site cache ────────────────────────────────────────────────────────
+
+async function getTrackedSites() {
+  if (cachedTrackedSites === null) {
+    const { trackedSites = [] } = await storageGet('trackedSites');
+    cachedTrackedSites = trackedSites;
+  }
+  return cachedTrackedSites;
+}
+
+chrome.storage.onChanged.addListener((changes) => {
+  if ('trackedSites' in changes) {
+    cachedTrackedSites = changes.trackedSites.newValue || [];
+  }
+});
+
+async function getTabTitle(tabId) {
+  try {
+    return await new Promise((resolve) => {
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError) resolve(null);
+        else resolve(tab?.title || null);
+      });
+    });
+  } catch { return null; }
 }
 
 // ─── Referrer resolution ──────────────────────────────────────────────────────
@@ -239,6 +279,29 @@ async function savePage({ url, title, parentId }) {
   return id;
 }
 
+async function saveCustomPage({ domain, url, title, parentId }) {
+  const normalUrl = normalizeUrl(url);
+  const storeKey = `csite_${domain}`;
+  const stored = await storageGet(storeKey);
+  const pages = stored[storeKey] || {};
+
+  const existing = Object.values(pages).find((p) => p.url === normalUrl);
+  if (existing) return existing.id;
+
+  const id = generateId();
+  pages[id] = {
+    id, url: normalUrl,
+    title: title || normalUrl,
+    timestamp: Date.now(),
+    parentId: parentId || null,
+    categories: [],
+    primaryCategory: null,
+    visitCount: 1,
+  };
+  await storageSet({ [storeKey]: pages });
+  return id;
+}
+
 // ─── Navigation listeners ─────────────────────────────────────────────────────
 
 async function handleNavCompleted(details) {
@@ -250,7 +313,6 @@ async function handleNavCompleted(details) {
   const mode = settings.saveMode ?? 'auto';
   const revisitNotify = settings.revisitNotify ?? true;
 
-  // Check if this URL was already saved
   const normalUrl = normalizeUrl(url);
   const slug = extractSlug(normalUrl);
   const existing = Object.values(pages).find(
@@ -258,7 +320,6 @@ async function handleNavCompleted(details) {
   );
 
   if (existing) {
-    // Increment visit counter and show revisit icon
     pages[existing.id].visitCount = (pages[existing.id].visitCount || 1) + 1;
     await storageSet({ pages });
     if (revisitNotify) setRevisitIcon(tabId); else resetIcon(tabId);
@@ -266,7 +327,6 @@ async function handleNavCompleted(details) {
     return;
   }
 
-  // New page — reset any lingering revisit icon
   resetIcon(tabId);
 
   const fallbackParentId = tabState[tabId]?.pageId ?? null;
@@ -291,6 +351,61 @@ chrome.webNavigation.onCompleted.addListener(handleNavCompleted, {
   url: [{ hostContains: 'wikipedia.org', pathContains: '/wiki/' }],
 });
 
+async function handleCustomNavCompleted(details) {
+  if (details.frameId !== 0) return;
+  const { tabId, url } = details;
+
+  const domain = getDomain(url);
+  if (!domain || domain.endsWith('wikipedia.org')) return;
+
+  const sites = await getTrackedSites();
+  const site = sites.find((s) => matchesSite(s, url));
+  if (!site) return;
+
+  const { settings = {} } = await storageGet('settings');
+  const mode = settings.saveMode ?? 'auto';
+  const revisitNotify = settings.revisitNotify ?? true;
+
+  const storeKey = `csite_${site.domain}`;
+  const stored = await storageGet(storeKey);
+  const pages = stored[storeKey] || {};
+  const normalUrl = normalizeUrl(url);
+  const existing = Object.values(pages).find((p) => p.url === normalUrl);
+
+  if (existing) {
+    pages[existing.id].visitCount = (pages[existing.id].visitCount || 1) + 1;
+    await storageSet({ [storeKey]: pages });
+    if (revisitNotify) setRevisitIcon(tabId); else resetIcon(tabId);
+    tabState[tabId] = { pageId: existing.id, url, customDomain: site.domain };
+    return;
+  }
+
+  resetIcon(tabId);
+  const fallbackParentId = (tabState[tabId]?.customDomain === site.domain)
+    ? (tabState[tabId]?.pageId ?? null)
+    : null;
+
+  if (mode === 'auto') {
+    const title = await getTabTitle(tabId);
+    const id = await saveCustomPage({ domain: site.domain, url, title, parentId: fallbackParentId });
+    tabState[tabId] = { pageId: id, url, customDomain: site.domain };
+    if (id) showBadge(tabId);
+  } else {
+    const title = await getTabTitle(tabId);
+    tabState[tabId] = {
+      pageId: tabState[tabId]?.pageId ?? null,
+      pendingUrl: url,
+      pendingParentId: fallbackParentId,
+      pendingTitle: title,
+      customDomain: site.domain,
+    };
+  }
+}
+
+chrome.webNavigation.onCompleted.addListener(handleCustomNavCompleted, {
+  url: [{ schemes: ['https', 'http'] }],
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => { delete tabState[tabId]; });
 
 // ─── Message bus ──────────────────────────────────────────────────────────────
@@ -306,10 +421,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if ((settings.saveMode ?? 'auto') !== 'scroll') { sendResponse({ ok: false }); return; }
         const state = tabState[tabId];
         if (!state?.pendingUrl) { sendResponse({ ok: false }); return; }
-        const id = await savePage({ url: state.pendingUrl, title: state.pendingTitle || null, parentId: state.pendingParentId });
-        tabState[tabId] = { pageId: id, url: state.pendingUrl };
-        if (id) showBadge(tabId);
-        sendResponse({ ok: true, id });
+
+        if (state.customDomain) {
+          const id = await saveCustomPage({
+            domain: state.customDomain,
+            url: state.pendingUrl,
+            title: state.pendingTitle || null,
+            parentId: state.pendingParentId || null,
+          });
+          tabState[tabId] = { pageId: id, url: state.pendingUrl, customDomain: state.customDomain };
+          if (id) showBadge(tabId);
+          sendResponse({ ok: true, id });
+        } else {
+          const id = await savePage({ url: state.pendingUrl, title: state.pendingTitle || null, parentId: state.pendingParentId });
+          tabState[tabId] = { pageId: id, url: state.pendingUrl };
+          if (id) showBadge(tabId);
+          sendResponse({ ok: true, id });
+        }
         break;
       }
 
@@ -325,6 +453,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       }
 
+      case 'MANUAL_SAVE_CSITE': {
+        const { tabId, domain, url, title } = msg;
+        if (!domain || !url) { sendResponse({ ok: false, error: 'Missing params' }); return; }
+        const id = await saveCustomPage({ domain, url, title: title || null, parentId: null });
+        if (!id) { sendResponse({ ok: false, error: 'Save failed' }); return; }
+        if (tabId != null) { tabState[tabId] = { pageId: id, url, customDomain: domain }; showBadge(tabId); }
+        sendResponse({ ok: true, id });
+        break;
+      }
+
       case 'ADD_URLS': {
         const { pages: existingPages = {} } = await storageGet('pages');
         const existingUrls = new Set(Object.values(existingPages).map((p) => p.url));
@@ -334,7 +472,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const normalUrl = normalizeUrl(entry.url);
           const id = await savePage({ url: entry.url, title: entry.title || null, parentId: null });
           results.push({ url: entry.url, id });
-          if (id && !existingUrls.has(normalUrl)) added++;
+          if (id && !existingUrls.has(normalUrl)) { added++; existingUrls.add(normalUrl); }
         }
         sendResponse({ ok: true, results, added });
         break;
@@ -388,9 +526,113 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       }
 
+      case 'IMPORT_CSITE': {
+        const { domain, name, pages: importPages } = msg;
+        if (!domain) { sendResponse({ ok: false, error: 'No domain' }); return; }
+
+        const sites = await getTrackedSites();
+        if (!sites.find((s) => s.domain === domain)) {
+          const updated = [...sites, { domain, name: name || domain }];
+          await storageSet({ trackedSites: updated });
+          cachedTrackedSites = updated;
+        }
+
+        const storeKey = `csite_${domain}`;
+        const stored = await storageGet(storeKey);
+        const existing = stored[storeKey] || {};
+        const existingUrls = new Set(Object.values(existing).map((p) => p.url));
+        let added = 0;
+
+        for (const page of (importPages || [])) {
+          if (!page?.url) continue;
+          const normalUrl = normalizeUrl(page.url);
+          if (existingUrls.has(normalUrl)) continue;
+          const id = page.id || generateId();
+          existing[id] = {
+            id, url: normalUrl,
+            title: page.title || normalUrl,
+            timestamp: page.timestamp || Date.now(),
+            parentId: page.parentId || null,
+            categories: [],
+            primaryCategory: null,
+            visitCount: page.visitCount || 1,
+          };
+          existingUrls.add(normalUrl);
+          added++;
+        }
+
+        await storageSet({ [storeKey]: existing });
+        sendResponse({ ok: true, added });
+        break;
+      }
+
       case 'GET_PAGES': {
         const { pages = {} } = await storageGet('pages');
         sendResponse({ pages: Object.values(pages) });
+        break;
+      }
+
+      case 'GET_TRACKED_SITES': {
+        const sites = await getTrackedSites();
+        sendResponse({ sites });
+        break;
+      }
+
+      case 'ADD_TRACKED_SITE': {
+        const sites = await getTrackedSites();
+        const { domain, name } = msg;
+        if (!domain) { sendResponse({ ok: false, error: 'No domain' }); return; }
+        const normalDomain = domain.toLowerCase().replace(/^www\./, '').replace(/\/$/, '');
+        if (sites.some((s) => s.domain === normalDomain)) {
+          sendResponse({ ok: false, error: 'already_tracked' }); return;
+        }
+        const newSite = { domain: normalDomain, name: name || normalDomain };
+        const updated = [...sites, newSite];
+        await storageSet({ trackedSites: updated });
+        cachedTrackedSites = updated;
+        sendResponse({ ok: true, site: newSite });
+        break;
+      }
+
+      case 'REMOVE_TRACKED_SITE': {
+        const sites = await getTrackedSites();
+        const { domain } = msg;
+        const updated = sites.filter((s) => s.domain !== domain);
+        await storageSet({ trackedSites: updated });
+        cachedTrackedSites = updated;
+        await new Promise((resolve) => chrome.storage.local.remove(`csite_${domain}`, resolve));
+        sendResponse({ ok: true });
+        break;
+      }
+
+      case 'GET_CSITE_PAGES': {
+        const { domain } = msg;
+        const storeKey = `csite_${domain}`;
+        const stored = await storageGet(storeKey);
+        const pages = stored[storeKey] || {};
+        sendResponse({ pages: Object.values(pages) });
+        break;
+      }
+
+      case 'DELETE_CSITE_PAGE': {
+        const { domain, id } = msg;
+        const storeKey = `csite_${domain}`;
+        const stored = await storageGet(storeKey);
+        const pages = stored[storeKey] || {};
+        delete pages[id];
+        await storageSet({ [storeKey]: pages });
+        sendResponse({ ok: true });
+        break;
+      }
+
+      case 'GET_CSITE_PAGE_STATUS': {
+        const { domain, url } = msg;
+        const storeKey = `csite_${domain}`;
+        const stored = await storageGet(storeKey);
+        const pages = stored[storeKey] || {};
+        const normalUrl = normalizeUrl(url);
+        const found = Object.values(pages).find((p) => p.url === normalUrl);
+        sendResponse({ saved: !!found, page: found || null });
         break;
       }
 
@@ -480,6 +722,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'CLEAR_ALL': {
+        const sites = await getTrackedSites();
+        const customKeys = sites.map((s) => `csite_${s.domain}`);
+        if (customKeys.length > 0) {
+          await new Promise((resolve) => chrome.storage.local.remove(customKeys, resolve));
+        }
         await storageSet({ pages: {}, graphPositions: {}, graphCacheDirty: true, readingList: {} });
         sendResponse({ ok: true });
         break;

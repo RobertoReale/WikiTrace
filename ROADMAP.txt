@@ -1,6 +1,6 @@
 WikiTrace — Stato e Roadmap
 ============================
-Aggiornato: 2026-05-04
+Aggiornato: 2026-05-05
 
 
 ════════════════════════════════════════
@@ -118,32 +118,38 @@ Approccio tecnico:
   [x] Nessuna modifica a manifest.json necessaria
 
 
-FEATURE C — TRACCIAMENTO SITI PERSONALIZZATI
----------------------------------------------
+FEATURE C — TRACCIAMENTO SITI PERSONALIZZATI  ✅ IMPLEMENTATA
+--------------------------------------------------------------
 Obiettivo: estendere il tracciamento a qualsiasi sito web scelto dall'utente,
-non solo Wikipedia. Ogni sito avrà il proprio archivio, grafo, statistiche
-e filtri separati, esattamente come avviene oggi per Wikipedia.
+non solo Wikipedia. Ogni sito ha il proprio archivio, grafo, statistiche
+e filtri separati, esattamente come avviene per Wikipedia.
 
 Funzionalità:
-  - Nuova sezione "Siti tracciati" nelle Impostazioni della dashboard:
-      • Elenco dei domini attivi (Wikipedia già presente di default)
-      • Pulsante "Aggiungi sito" → l'utente inserisce un dominio (es. britannica.com)
-      • Pulsante "Rimuovi" per ogni sito (con conferma, i dati vengono cancellati)
-  - Per ogni sito aggiunto:
-      • Archivio visite indipendente in chrome.storage.local
-      • Grafo di navigazione separato nella dashboard
-      • Tab dedicata nella dashboard (o selettore a tendina per scegliere il sito)
-      • Statistiche (pagine visitate, connessioni, categorie) per dominio
-  - Il popup mostra a quale sito tracciato appartiene la pagina corrente
-  - Esportazione/importazione JSON include tutti i siti e i relativi dati
+  [x] Nuova tab "Sites" nella dashboard:
+      [x] Elenco dei domini attivi (Wikipedia built-in, sempre presente)
+      [x] Form "Add a new site" → l'utente inserisce dominio + nome opzionale
+      [x] Pulsante "Remove" per ogni sito (con conferma, i dati vengono cancellati)
+      [x] Pulsante "View →" per saltare direttamente alla lista di quel sito
+  [x] Per ogni sito aggiunto:
+      [x] Archivio visite indipendente in chrome.storage.local (chiave csite_<domain>)
+      [x] Grafo di navigazione separato (posizioni cached in localStorage per sito)
+      [x] Selettore a tendina nella topbar della dashboard per scegliere il sito attivo
+      [x] Statistiche (pagine visitate) per sito
+      [x] Eliminazione singola pagina per sito
+  [x] Il popup mostra titolo, badge saved/unsaved e pulsante "Save this page"
+      per le pagine dei siti tracciati, esattamente come per Wikipedia
+  [x] Esportazione/importazione JSON include tutti i siti e i relativi dati
+      (formato: { pages, readingList, trackedSites, customSites })
 
-Approccio tecnico:
-  - chrome.storage.local: struttura a namespace per dominio
-      { sites: { "en.wikipedia.org": { pages: [...] }, "britannica.com": { pages: [...] } } }
-  - manifest.json: host_permissions generici (<all_urls> oppure richiesti dinamicamente
-    con chrome.permissions.request al momento dell'aggiunta del sito)
-  - background.js: controlla se il dominio della pagina corrente è nella lista attiva
-  - dashboard: componente riusabile "SiteView" parametrizzato per dominio
+Approccio tecnico implementato:
+  [x] chrome.storage.local: chiave csite_<domain> per ogni sito personalizzato
+  [x] manifest.json: host_permissions <all_urls>, content_scripts su <all_urls>
+  [x] background.js: cache in-memory di trackedSites, listener webNavigation
+      generico per tutti gli https/http che controlla la cache e salva se il
+      dominio è tracciato; saveCustomPage() separato da savePage()
+  [x] Nuovi messaggi: GET/ADD/REMOVE_TRACKED_SITE, GET/DELETE_CSITE_PAGE,
+      GET_CSITE_PAGE_STATUS, MANUAL_SAVE_CSITE, IMPORT_CSITE
+  [x] Versione bumped a 1.2.0
 
 
 FEATURE D — ACCOUNT SYNC (Google Sign-In + Firebase)

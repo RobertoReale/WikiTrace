@@ -13,11 +13,15 @@
   <div class="topbar">
     <div class="logo">W</div>
     <h1>WikiTrace</h1>
+    <select id="site-selector" class="site-selector-select" title="Select site to view">
+      <option value="wikipedia">Wikipedia</option>
+    </select>
     <span class="topbar-stats" id="topbar-stats"></span>
     <div class="tabs">
       <button class="tab active" data-tab="list">List</button>
       <button class="tab" data-tab="graph">Graph</button>
       <button class="tab" data-tab="readinglist">Reading List</button>
+      <button class="tab" data-tab="sites">Sites</button>
       <button class="tab" data-tab="about">About</button>
     </div>
     <button class="btn-theme" id="btn-theme" title="Toggle theme">☀</button>
@@ -95,7 +99,7 @@
           <div class="about-logo">W</div>
           <div>
             <h2 class="about-title">WikiTrace</h2>
-            <span class="about-version">v1.1.0</span>
+            <span class="about-version">v1.2.0</span>
           </div>
         </div>
 
@@ -144,6 +148,27 @@
 
     <div class="panel hidden" id="panel-readinglist">
       <div class="list-view" id="rl-view"></div>
+    </div>
+
+    <div class="panel hidden" id="panel-sites">
+      <div class="sites-view">
+        <div class="sites-inner">
+          <div class="sites-header">
+            <h2 class="sites-title">Tracked Sites</h2>
+            <p class="sites-desc">Add any website to track your browsing history, just like Wikipedia. Pages are saved locally — nothing leaves your browser.</p>
+          </div>
+          <div class="sites-add-card">
+            <div class="sites-add-label">Add a new site</div>
+            <div class="sites-add-row">
+              <input type="text" id="sites-domain-input" placeholder="Domain (e.g. britannica.com)" class="sites-input">
+              <input type="text" id="sites-name-input" placeholder="Name (optional)" class="sites-input sites-input-name">
+              <button class="btn-add-site" id="btn-add-site">Add</button>
+            </div>
+            <div id="sites-add-msg" class="sites-add-msg"></div>
+          </div>
+          <div class="sites-list" id="sites-list"></div>
+        </div>
+      </div>
     </div>
 
   </div>

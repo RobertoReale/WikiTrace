@@ -32,7 +32,10 @@ let activeCategories = null;
 let sortKey = 'date-desc';
 let searchQuery = '';
 let currentTab = 'list';
+let currentSite = 'wikipedia';
+let allTrackedSites = [];
 
+let allWikiPages = [];
 let allReadingList = [];
 let rlSearchQuery = '';
 let rlActiveCategory = null;
@@ -40,13 +43,38 @@ let rlActiveCategory = null;
 // ─── Data loading ─────────────────────────────────────────────────────────────
 
 async function loadPages() {
-  const { pages } = await send('GET_PAGES');
-  allPages = pages.sort((a, b) => b.timestamp - a.timestamp);
+  if (currentSite === 'wikipedia') {
+    const { pages } = await send('GET_PAGES');
+    allPages = pages.sort((a, b) => b.timestamp - a.timestamp);
+    allWikiPages = allPages;
+  } else {
+    const { pages } = await send('GET_CSITE_PAGES', { domain: currentSite });
+    allPages = (pages || []).sort((a, b) => b.timestamp - a.timestamp);
+  }
 }
 
 async function loadReadingList() {
   const { readingList } = await send('GET_READING_LIST');
   allReadingList = (readingList || []).sort((a, b) => b.savedAt - a.savedAt);
+}
+
+async function loadSiteSelector() {
+  const { sites } = await send('GET_TRACKED_SITES');
+  allTrackedSites = sites || [];
+  updateSiteSelector();
+}
+
+function updateSiteSelector() {
+  const sel = $('site-selector');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="wikipedia">Wikipedia</option>';
+  for (const s of allTrackedSites) {
+    const opt = document.createElement('option');
+    opt.value = s.domain;
+    opt.textContent = s.name || s.domain;
+    sel.appendChild(opt);
+  }
+  if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
 }
 
 function getCategories() {
@@ -162,7 +190,7 @@ function renderRLCategoryFilter() {
 
 function renderReadingList() {
   const container = $('rl-view');
-  const visitedUrls = new Set(allPages.map((p) => p.url));
+  const visitedUrls = new Set(allWikiPages.map((p) => p.url));
   const q = rlSearchQuery.toLowerCase();
 
   const items = allReadingList.filter((r) => {
@@ -239,9 +267,15 @@ function renderRLStats() {
 // ─── Stats bar ────────────────────────────────────────────────────────────────
 
 function renderStats() {
-  const cats = new Set(allPages.map((p) => p.primaryCategory).filter(Boolean));
-  $('topbar-stats').textContent =
-    `${allPages.length} page${allPages.length !== 1 ? 's' : ''} · ${cats.size} categories`;
+  if (currentSite === 'wikipedia') {
+    const cats = new Set(allPages.map((p) => p.primaryCategory).filter(Boolean));
+    $('topbar-stats').textContent =
+      `${allPages.length} page${allPages.length !== 1 ? 's' : ''} · ${cats.size} categories`;
+  } else {
+    const siteName = allTrackedSites.find((s) => s.domain === currentSite)?.name || currentSite;
+    $('topbar-stats').textContent =
+      `${siteName} · ${allPages.length} page${allPages.length !== 1 ? 's' : ''}`;
+  }
 }
 
 // ─── List view ────────────────────────────────────────────────────────────────
@@ -274,7 +308,7 @@ function renderList() {
     container.innerHTML = `
       <div class="empty-state">
         <p>${allPages.length === 0 ? 'No pages saved yet.' : 'No results match your filter.'}</p>
-        <small>${allPages.length === 0 ? 'Browse Wikipedia — pages appear here automatically.' : 'Try adjusting your search or category filters.'}</small>
+        <small>${allPages.length === 0 ? 'Browse some pages — they appear here automatically.' : 'Try adjusting your search or category filters.'}</small>
       </div>`;
     return;
   }
@@ -304,7 +338,11 @@ function renderList() {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const id = btn.dataset.del;
-      await send('DELETE_PAGE', { id });
+      if (currentSite === 'wikipedia') {
+        await send('DELETE_PAGE', { id });
+      } else {
+        await send('DELETE_CSITE_PAGE', { domain: currentSite, id });
+      }
       allPages = allPages.filter((p) => p.id !== id);
       renderStats();
       renderCategoryFilter();
@@ -333,6 +371,20 @@ $('search-input').addEventListener('input', (e) => {
   renderList();
 });
 
+// ─── Site selector ────────────────────────────────────────────────────────────
+
+$('site-selector').addEventListener('change', async (e) => {
+  currentSite = e.target.value;
+  graphView.setPosKey(currentSite === 'wikipedia' ? 'wt-positions' : `wt-positions-${currentSite}`);
+  activeCategories = null;
+  await loadPages();
+  renderStats();
+  renderCategoryFilter();
+  renderList();
+  if (graphView.built) graphView.rebuild(allPages);
+  $('add-url-section').classList.toggle('hidden', currentSite !== 'wikipedia' || currentTab === 'readinglist');
+});
+
 // ─── Tab switching ────────────────────────────────────────────────────────────
 
 document.querySelectorAll('.tab').forEach((btn) => {
@@ -343,10 +395,13 @@ document.querySelectorAll('.tab').forEach((btn) => {
     $('panel-graph').classList.toggle('hidden', currentTab !== 'graph');
     $('panel-about').classList.toggle('hidden', currentTab !== 'about');
     $('panel-readinglist').classList.toggle('hidden', currentTab !== 'readinglist');
-    document.querySelector('.sidebar').classList.toggle('hidden', currentTab === 'about');
+    $('panel-sites').classList.toggle('hidden', currentTab !== 'sites');
+    const hideSidebar = currentTab === 'about' || currentTab === 'sites';
+    document.querySelector('.sidebar').classList.toggle('hidden', hideSidebar);
     $('list-controls').style.display = currentTab === 'list' ? '' : 'none';
-    $('cat-filter-section').classList.toggle('hidden', currentTab === 'readinglist');
-    $('add-url-section').classList.toggle('hidden', currentTab === 'readinglist');
+    $('cat-filter-section').classList.toggle('hidden', currentTab === 'readinglist' || currentTab === 'sites');
+    $('add-url-section').classList.toggle('hidden',
+      currentSite !== 'wikipedia' || currentTab === 'readinglist' || currentTab === 'sites');
     $('rl-controls').classList.toggle('hidden', currentTab !== 'readinglist');
     $('rl-cat-section').classList.toggle('hidden', currentTab !== 'readinglist');
     $('btn-export-svg').classList.toggle('hidden', currentTab !== 'graph');
@@ -356,6 +411,8 @@ document.querySelectorAll('.tab').forEach((btn) => {
       renderRLStats();
       renderRLCategoryFilter();
       renderReadingList();
+    } else if (currentTab === 'sites') {
+      renderSitesPanel();
     } else {
       renderStats();
     }
@@ -365,6 +422,110 @@ document.querySelectorAll('.tab').forEach((btn) => {
 $('rl-search-input').addEventListener('input', (e) => {
   rlSearchQuery = e.target.value;
   renderReadingList();
+});
+
+// ─── Sites panel ──────────────────────────────────────────────────────────────
+
+async function renderSitesPanel() {
+  const container = $('sites-list');
+  container.innerHTML = '';
+
+  const wikiPageCount = currentSite === 'wikipedia'
+    ? allPages.length
+    : (await send('GET_PAGES')).pages.length;
+  container.appendChild(buildSiteCard(
+    { domain: 'wikipedia.org', name: 'Wikipedia' }, true, wikiPageCount
+  ));
+
+  for (const site of allTrackedSites) {
+    const { pages } = await send('GET_CSITE_PAGES', { domain: site.domain });
+    container.appendChild(buildSiteCard(site, false, (pages || []).length));
+  }
+}
+
+function buildSiteCard(site, isBuiltin, pageCount) {
+  const count = pageCount ?? '…';
+  const card = document.createElement('div');
+  card.className = 'site-card';
+  card.innerHTML = `
+    <div class="site-card-info">
+      <div class="site-card-domain">
+        ${escHtml(site.domain)}
+        ${isBuiltin ? '<span class="site-card-builtin">built-in</span>' : ''}
+      </div>
+      <div class="site-card-name">${escHtml(site.name || site.domain)}</div>
+      <div class="site-card-stats">${count} page${count !== 1 ? 's' : ''} saved</div>
+    </div>
+    <div class="site-card-actions">
+      <button class="btn-goto-site" title="View this site's pages">View →</button>
+      ${!isBuiltin ? `<button class="btn-danger-text" title="Remove site and delete all data">Remove</button>` : ''}
+    </div>`;
+
+  card.querySelector('.btn-goto-site').addEventListener('click', () => {
+    const val = isBuiltin ? 'wikipedia' : site.domain;
+    $('site-selector').value = val;
+    $('site-selector').dispatchEvent(new Event('change'));
+    document.querySelector('.tab[data-tab="list"]').click();
+  });
+
+  const removeBtn = card.querySelector('.btn-danger-text');
+  if (removeBtn) {
+    removeBtn.addEventListener('click', async () => {
+      if (!confirm(`Remove ${site.domain}? All saved pages will be deleted.`)) return;
+      await send('REMOVE_TRACKED_SITE', { domain: site.domain });
+      allTrackedSites = allTrackedSites.filter((s) => s.domain !== site.domain);
+      localStorage.removeItem(`wt-positions-${site.domain}`);
+      if (currentSite === site.domain) {
+        currentSite = 'wikipedia';
+        graphView.setPosKey('wt-positions');
+        $('site-selector').value = 'wikipedia';
+        await loadPages();
+        renderStats();
+        renderCategoryFilter();
+        renderList();
+      }
+      updateSiteSelector();
+      renderSitesPanel();
+    });
+  }
+
+  return card;
+}
+
+$('btn-add-site').addEventListener('click', async () => {
+  const domain = $('sites-domain-input').value.trim();
+  const name = $('sites-name-input').value.trim();
+  const msgEl = $('sites-add-msg');
+
+  if (!domain) {
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Please enter a domain.';
+    return;
+  }
+
+  $('btn-add-site').disabled = true;
+  const resp = await send('ADD_TRACKED_SITE', { domain, name });
+  $('btn-add-site').disabled = false;
+
+  if (resp?.ok) {
+    $('sites-domain-input').value = '';
+    $('sites-name-input').value = '';
+    msgEl.style.color = 'var(--success)';
+    msgEl.textContent = `Now tracking ${resp.site.domain}`;
+    allTrackedSites.push(resp.site);
+    updateSiteSelector();
+    renderSitesPanel();
+    setTimeout(() => { msgEl.textContent = ''; }, 3000);
+  } else {
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = resp?.error === 'already_tracked'
+      ? 'This site is already being tracked.'
+      : 'Failed to add site. Check the domain format.';
+  }
+});
+
+$('sites-domain-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('btn-add-site').click();
 });
 
 // ─── Add URLs ─────────────────────────────────────────────────────────────────
@@ -407,6 +568,9 @@ $('btn-clear').addEventListener('click', async () => {
   if (!confirm('Delete all saved pages and reading list? This cannot be undone.')) return;
   await send('CLEAR_ALL');
   localStorage.removeItem('wt-positions');
+  for (const site of allTrackedSites) {
+    localStorage.removeItem(`wt-positions-${site.domain}`);
+  }
   allPages = [];
   allReadingList = [];
   activeCategories = null;
@@ -416,16 +580,25 @@ $('btn-clear').addEventListener('click', async () => {
   renderCategoryFilter();
   renderList();
   if (currentTab === 'readinglist') { renderRLCategoryFilter(); renderReadingList(); }
+  if (currentTab === 'sites') renderSitesPanel();
 });
 
 // ─── Import / Export ──────────────────────────────────────────────────────────
 
 $('btn-export').addEventListener('click', async () => {
-  const [{ pages }, { readingList }] = await Promise.all([
+  const [{ pages }, { readingList }, { sites }] = await Promise.all([
     send('GET_PAGES'),
     send('GET_READING_LIST'),
+    send('GET_TRACKED_SITES'),
   ]);
-  const data = { pages, readingList: readingList || [] };
+
+  const customSites = {};
+  for (const site of (sites || [])) {
+    const { pages: sitePages } = await send('GET_CSITE_PAGES', { domain: site.domain });
+    customSites[site.domain] = { name: site.name || site.domain, pages: sitePages || [] };
+  }
+
+  const data = { pages, readingList: readingList || [], trackedSites: sites || [], customSites };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -449,14 +622,27 @@ $('import-file-input').addEventListener('change', async (e) => {
       const nodes = Array.isArray(parsed) ? parsed : (parsed.pages || []);
       const readingListItems = Array.isArray(parsed) ? [] : (parsed.readingList || []);
       const resp = await send('IMPORT_PAGES', { nodes, readingListItems });
+
+      let customAdded = 0;
+      if (parsed.customSites && typeof parsed.customSites === 'object') {
+        for (const [domain, siteData] of Object.entries(parsed.customSites)) {
+          const cResp = await send('IMPORT_CSITE', {
+            domain, name: siteData.name, pages: siteData.pages || [],
+          });
+          if (cResp?.ok) customAdded += cResp.added;
+        }
+      }
+
       if (resp?.ok) {
         const rlMsg = resp.addedRL > 0 ? `, ${resp.addedRL} reading list item(s)` : '';
-        showIOToast(`Imported ${resp.added} new page(s)${rlMsg}.`);
-        await Promise.all([loadPages(), loadReadingList()]);
+        const csMsg = customAdded > 0 ? `, ${customAdded} custom site page(s)` : '';
+        showIOToast(`Imported ${resp.added} new page(s)${rlMsg}${csMsg}.`);
+        await Promise.all([loadPages(), loadReadingList(), loadSiteSelector()]);
         renderStats();
         renderCategoryFilter();
         renderList();
         if (graphView.built) graphView.rebuild(allPages);
+        if (currentTab === 'sites') renderSitesPanel();
       }
     } catch {
       showIOToast('Import failed: invalid JSON file.', 'error');
@@ -546,7 +732,7 @@ const graphView = (() => {
           <small>Place <code>d3.min.js</code> in <code>lib/</code>. See README.</small>`;
         $('graph-empty').classList.remove('hidden');
       },
-      applyFilter() {}, rebuild() {}, clear() {},
+      applyFilter() {}, rebuild() {}, clear() {}, setPosKey() {},
     };
   }
 
@@ -557,6 +743,7 @@ const graphView = (() => {
   let nodesData = [];
   let linksData = [];
   let activeFilter = null;
+  let posKey = 'wt-positions';
 
   function buildEdges(pages) {
     const byId = new Map(pages.map((p) => [p.id, p]));
@@ -663,7 +850,7 @@ const graphView = (() => {
       gMain.attr('transform', e.transform);
     }));
 
-    const cachedPos = JSON.parse(localStorage.getItem('wt-positions') || '{}');
+    const cachedPos = JSON.parse(localStorage.getItem(posKey) || '{}');
     nodesData = pages.map((p) => ({
       id: p.id, title: p.title, url: p.url,
       category: p.primaryCategory || 'Uncategorized',
@@ -744,7 +931,7 @@ const graphView = (() => {
     simulation.on('end', () => {
       const pos = {};
       for (const n of nodesData) pos[n.id] = { x: n.x, y: n.y };
-      localStorage.setItem('wt-positions', JSON.stringify(pos));
+      localStorage.setItem(posKey, JSON.stringify(pos));
     });
 
     if (activeFilter) applyFilter(activeFilter);
@@ -784,7 +971,6 @@ const graphView = (() => {
       };
     });
 
-    // Place each label at the hull edge pointing away from the graph centroid
     const gcx = labelPos.reduce((s, lp) => s + lp.cx, 0) / labelPos.length;
     const gcy = labelPos.reduce((s, lp) => s + lp.cy, 0) / labelPos.length;
     for (const lp of labelPos) {
@@ -804,7 +990,6 @@ const graphView = (() => {
       }
     }
 
-    // Bounding box for a label respecting its text-anchor
     const lbbox = (lp) => {
       const hw = lp.cat.length * 3.5;
       const lx = lp.anchor === 'start' ? lp.x : lp.anchor === 'end' ? lp.x - hw * 2 : lp.x - hw;
@@ -834,7 +1019,6 @@ const graphView = (() => {
           }
         }
       }
-      // Phase 2: push category labels away from node labels
       for (let i = 0; i < labelPos.length; i++) {
         const lp = labelPos[i];
         const visNodes = nodesData.filter((n) => !activeFilter || activeFilter.has(n.category));
@@ -890,6 +1074,7 @@ const graphView = (() => {
     init(pages) { if (!built) build(pages); },
     rebuild(pages) { built = false; if (simulation) simulation.stop(); build(pages); },
     applyFilter,
+    setPosKey(key) { posKey = key; },
     clear() {
       built = false;
       if (simulation) simulation.stop();
@@ -917,7 +1102,7 @@ $('btn-theme').addEventListener('click', async () => {
 (async () => {
   const { settings } = await send('GET_SETTINGS');
   applyTheme(settings.theme ?? 'dark');
-  await Promise.all([loadPages(), loadReadingList()]);
+  await Promise.all([loadPages(), loadReadingList(), loadSiteSelector()]);
   renderStats();
   renderCategoryFilter();
   renderList();

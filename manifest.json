@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WikiTrace",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Track, archive and visualise every Wikipedia page you visit.",
 
   "permissions": [
@@ -12,13 +12,13 @@
   ],
 
   "host_permissions": [
-    "https://*.wikipedia.org/*"
+    "<all_urls>"
   ],
 
   "web_accessible_resources": [
     {
       "resources": ["lib/d3.min.js"],
-      "matches": ["https://*.wikipedia.org/*"]
+      "matches": ["<all_urls>"]
     }
   ],
 
@@ -28,7 +28,7 @@
 
   "content_scripts": [
     {
-      "matches": ["https://*.wikipedia.org/wiki/*"],
+      "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
