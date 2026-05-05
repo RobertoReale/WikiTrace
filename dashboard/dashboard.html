@@ -64,11 +64,24 @@
       <div class="sidebar-section hidden" id="rl-controls">
         <h3>Search</h3>
         <input type="search" class="filter-input" id="rl-search-input" placeholder="Filter reading list…">
+        <div class="sort-btn-group" style="margin-top:10px;">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px;">Sort by</div>
+          <button class="rl-sort-btn active" data-sort="date-desc">Date added <span>↓</span></button>
+          <button class="rl-sort-btn" data-sort="date-asc">Date added <span>↑</span></button>
+          <button class="rl-sort-btn" data-sort="title">Title A–Z</button>
+          <button class="rl-sort-btn" data-sort="domain">Domain</button>
+          <button class="rl-sort-btn" data-sort="category">Category</button>
+        </div>
       </div>
 
       <div class="sidebar-section hidden" id="rl-cat-section">
         <h3>My categories</h3>
         <div class="cat-list" id="rl-cat-filter-list"></div>
+      </div>
+
+      <div class="sidebar-section hidden" id="rl-domain-section">
+        <h3>My sites</h3>
+        <div class="cat-list" id="rl-domain-filter-list"></div>
       </div>
 
     </div>
@@ -147,6 +160,7 @@
     </div>
 
     <div class="panel hidden" id="panel-readinglist">
+      <div id="rl-active-filters" class="active-filters-bar hidden"></div>
       <div class="list-view" id="rl-view"></div>
     </div>
 

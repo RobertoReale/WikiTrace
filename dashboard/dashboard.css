@@ -215,7 +215,7 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
 }
 
 .hidden { display: none !important; }
-.panel { display: flex; flex: 1; overflow: hidden; }
+.panel { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
 .graph-tooltip {
   position: fixed;
@@ -324,6 +324,29 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
 .rl-mark-read:hover { background: rgba(99,102,241,0.15); }
 .rl-remove { color: var(--text3); }
 .rl-remove:hover { color: var(--danger); background: var(--danger-bg); }
+
+/* ─── Active Filters Bar ─────────────────────────────────────────────────────── */
+
+.active-filters-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 20px; border-bottom: 1px solid var(--border);
+  background: var(--bg0);
+}
+.filter-tag {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg1); border: 1px solid var(--border);
+  padding: 3px 8px; border-radius: 12px; font-size: 11px; color: var(--text);
+}
+.filter-tag-label { color: var(--text3); }
+.filter-tag-close {
+  cursor: pointer; color: var(--text3); font-weight: 700; border: none; background: none; font-size: 10px;
+}
+.filter-tag-close:hover { color: var(--danger); }
+.btn-clear-filters {
+  margin-left: auto; background: none; border: none;
+  color: var(--accent); font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.btn-clear-filters:hover { text-decoration: underline; }
 
 /* ─── Site selector (topbar) ─────────────────────────────────────────────────── */
 

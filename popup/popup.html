@@ -161,6 +161,19 @@
     }
     .rl-btn-confirm:hover { background: var(--accent-hover); }
 
+    .rl-dropdown {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: var(--bg1); border: 1px solid var(--border);
+      border-top: none; border-radius: 0 0 5px 5px;
+      max-height: 120px; overflow-y: auto; z-index: 10;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2);
+    }
+    .rl-dropdown.hidden { display: none; }
+    .rl-dropdown-item {
+      padding: 6px 8px; font-size: 12px; color: var(--text); cursor: pointer;
+    }
+    .rl-dropdown-item:hover { background: var(--bg0); color: var(--accent); }
+
     .page-revisit-info {
       margin-top: 5px; font-size: 11px; color: var(--text3);
     }
@@ -213,16 +226,15 @@
     <div class="page-revisit-info hidden" id="page-revisit-info"></div>
   </div>
 
-  <button class="btn-save" id="btn-save" disabled>Save this page</button>
-  <button class="btn-save-later" id="btn-save-later" disabled>🔖 Save for later</button>
-
-  <div class="rl-picker hidden" id="rl-picker">
+  <div class="rl-picker" id="rl-picker">
     <div class="rl-picker-label">Category</div>
-    <input type="text" class="rl-input" id="rl-category-input" placeholder="e.g. History, Science…">
+    <div style="position: relative;">
+      <input type="text" class="rl-input" id="rl-category-input" placeholder="Search or create new…" autocomplete="off">
+      <div id="rl-dropdown" class="rl-dropdown hidden"></div>
+    </div>
     <div class="rl-cats" id="rl-existing-cats"></div>
     <div class="rl-picker-actions">
-      <button class="rl-btn-cancel" id="rl-cancel">Cancel</button>
-      <button class="rl-btn-confirm" id="rl-confirm">Save to list</button>
+      <button class="rl-btn-confirm" id="rl-confirm" style="flex: 1; margin-top: 4px;">Save to reading list</button>
     </div>
   </div>
 

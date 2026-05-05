@@ -36,7 +36,7 @@ async function loadStats() {
   const todayTs = today.getTime();
 
   const todayCount = pages.filter((p) => p.timestamp >= todayTs).length;
-  const cats = new Set(pages.map((p) => p.primaryCategory).filter(Boolean));
+  const cats = new Set(pages.map((p) => p.userCategory || p.primaryCategory).filter(Boolean));
 
   $('stat-pages').textContent = pages.length;
   $('stat-cats').textContent = cats.size;
@@ -47,33 +47,54 @@ async function loadStats() {
 
 async function loadCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
+  if (!tab || !tab.url) return;
 
-  if (!isWikiUrl(tab.url)) {
-    // Check if this domain is a custom tracked site
-    const { sites = [] } = await send('GET_TRACKED_SITES');
-    if (sites.length > 0) {
-      let hostname;
-      try { hostname = new URL(tab.url).hostname; } catch { return; }
-      const site = sites.find((s) => hostname === s.domain || hostname.endsWith('.' + s.domain));
-      if (site) await loadCustomSiteTab(tab, site);
-    }
-    return;
+  let isWiki = false;
+  try { isWiki = new URL(tab.url).hostname.endsWith('wikipedia.org'); } catch {}
+
+  let site = null;
+  const { sites = [] } = await send('GET_TRACKED_SITES');
+  if (sites.length > 0 && !isWiki) {
+    let hostname;
+    try { hostname = new URL(tab.url).hostname; } catch {}
+    site = sites.find((s) => hostname === s.domain || hostname.endsWith('.' + s.domain));
   }
 
   const titleEl = $('page-title');
   const catsEl = $('page-cats');
-  const btnSave = $('btn-save');
-  const btnSaveLater = $('btn-save-later');
+  const rlConfirm = $('rl-confirm');
 
-  titleEl.textContent = tab.title.replace(/ - Wikipedia.*$/, '');
+  // Unified fetching of reading list status
+  const { saved: isWikiSaved, page: wikiPage, inReadingList } = await send('GET_PAGE_STATUS', { url: tab.url });
+  let saved = isWikiSaved;
+  let page = wikiPage;
 
-  const { saved, page, inReadingList } = await send('GET_PAGE_STATUS', { url: tab.url });
+  if (site) {
+    titleEl.textContent = tab.title || site.domain;
+    catsEl.textContent = site.name || site.domain;
+    const csiteResp = await send('GET_CSITE_PAGE_STATUS', { domain: site.domain, url: tab.url });
+    saved = csiteResp.saved;
+    page = csiteResp.page;
+  } else if (isWiki) {
+    titleEl.textContent = tab.title.replace(/ - Wikipedia.*$/, '');
+  } else {
+    // Generic webpage
+    titleEl.textContent = tab.title || tab.url;
+    catsEl.textContent = 'Web Page';
+    saved = false;
+  }
 
-  if (saved) {
+  if (saved || inReadingList) {
     titleEl.insertAdjacentHTML('beforeend', ' <span class="badge badge-saved">Saved</span>');
-    if (page?.userCategory) {
-        catsEl.textContent = page.userCategory;
+    
+    if (site || !isWiki) {
+      if (inReadingList?.userCategory) {
+        catsEl.textContent = inReadingList.userCategory;
+      }
+    } else {
+      // Wikipedia
+      if (page?.userCategory || inReadingList?.userCategory) {
+        catsEl.textContent = page?.userCategory || inReadingList?.userCategory;
       } else if (page?.categories?.length) {
         catsEl.textContent = page.categories.join(' · ');
       } else {
@@ -81,108 +102,101 @@ async function loadCurrentTab() {
         catsEl.style.fontStyle = 'italic';
         catsEl.style.opacity = '0.5';
       }
-    if (page?.timestamp) {
-      const date = new Date(page.timestamp).toLocaleDateString();
-      const visits = page.visitCount || 1;
+    }
+
+    if (page?.timestamp || inReadingList?.savedAt) {
+      const date = new Date(page?.timestamp || inReadingList?.savedAt).toLocaleDateString();
+      const visits = page?.visitCount || 1;
       const revisitEl = $('page-revisit-info');
       revisitEl.textContent = `Saved ${date} · ${visits} visit${visits === 1 ? '' : 's'}`;
       revisitEl.classList.remove('hidden');
     }
-    btnSave.disabled = true;
-    btnSave.textContent = '✓ Already saved';
   } else {
     titleEl.insertAdjacentHTML('beforeend', ' <span class="badge badge-unsaved">Not saved</span>');
-    btnSave.disabled = false;
-    btnSave.textContent = 'Save this page';
-    btnSave.onclick = async () => {
-      btnSave.disabled = true;
-      btnSave.textContent = 'Saving…';
-      const resp = await send('MANUAL_SAVE', { tabId: tab.id, url: tab.url, title: tab.title });
-      if (resp?.ok) {
-        flash('Saved!');
-        btnSave.textContent = '✓ Saved';
-        btnSaveLater.disabled = true;
-        $('rl-picker').classList.add('hidden');
-        titleEl.querySelector('.badge').className = 'badge badge-saved';
-        titleEl.querySelector('.badge').textContent = 'Saved';
-        await loadStats();
-      } else {
-        flash('Error saving page', '#f87171');
-        btnSave.disabled = false;
-        btnSave.textContent = 'Save this page';
-      }
-    };
   }
+
+  loadRLCategoryHints();
 
   if (inReadingList) {
-    btnSaveLater.disabled = true;
-    btnSaveLater.textContent = '🔖 In reading list';
+    rlConfirm.disabled = true;
+    rlConfirm.textContent = '✓ Already in list';
+    $('rl-category-input').value = inReadingList.userCategory || '';
   } else {
-    btnSaveLater.disabled = false;
-    btnSaveLater.onclick = () => showRLPicker(tab);
-  }
-}
+    rlConfirm.disabled = false;
+    rlConfirm.textContent = 'Save to reading list';
+    
+    const confirm = async () => {
+      const cat = $('rl-category-input').value.trim() || 'General';
+      rlConfirm.disabled = true;
+      rlConfirm.textContent = 'Saving…';
+      
+      const respRL = await send('ADD_TO_READING_LIST', { url: tab.url, title: tab.title, userCategory: cat });
+      
+      // We only manually save to the graph if it's Wikipedia or Custom Site
+      if (isWiki) {
+        await send('MANUAL_SAVE', { tabId: tab.id, url: tab.url, title: tab.title, category: cat });
+      } else if (site) {
+        await send('MANUAL_SAVE_CSITE', { tabId: tab.id, domain: site.domain, url: tab.url, title: tab.title });
+      }
 
-// ── Custom site tab ───────────────────────────────────────────────────────────
-
-async function loadCustomSiteTab(tab, site) {
-  const titleEl = $('page-title');
-  const catsEl = $('page-cats');
-  const btnSave = $('btn-save');
-  const btnSaveLater = $('btn-save-later');
-
-  titleEl.textContent = tab.title || site.domain;
-  catsEl.textContent = site.name || site.domain;
-
-  const { saved, page } = await send('GET_CSITE_PAGE_STATUS', { domain: site.domain, url: tab.url });
-
-  if (saved) {
-    titleEl.insertAdjacentHTML('beforeend', ' <span class="badge badge-saved">Saved</span>');
-    if (page?.timestamp) {
-      const date = new Date(page.timestamp).toLocaleDateString();
-      const visits = page.visitCount || 1;
-      const revisitEl = $('page-revisit-info');
-      revisitEl.textContent = `Saved ${date} · ${visits} visit${visits === 1 ? '' : 's'}`;
-      revisitEl.classList.remove('hidden');
-    }
-    btnSave.disabled = true;
-    btnSave.textContent = '✓ Already saved';
-  } else {
-    titleEl.insertAdjacentHTML('beforeend', ' <span class="badge badge-unsaved">Not saved</span>');
-    btnSave.disabled = false;
-    btnSave.textContent = 'Save this page';
-    btnSave.onclick = async () => {
-      btnSave.disabled = true;
-      btnSave.textContent = 'Saving…';
-      const resp = await send('MANUAL_SAVE_CSITE', {
-        tabId: tab.id, domain: site.domain, url: tab.url, title: tab.title,
-      });
-      if (resp?.ok) {
-        flash('Saved!');
-        btnSave.textContent = '✓ Saved';
+      if (respRL?.ok) {
+        flash('Saved to ' + cat);
+        rlConfirm.textContent = '✓ Saved';
         titleEl.querySelector('.badge').className = 'badge badge-saved';
         titleEl.querySelector('.badge').textContent = 'Saved';
         await loadStats();
       } else {
-        flash('Error saving page', '#f87171');
-        btnSave.disabled = false;
-        btnSave.textContent = 'Save this page';
+        flash('Error saving', '#f87171');
+        rlConfirm.disabled = false;
+        rlConfirm.textContent = 'Save to reading list';
       }
     };
-  }
 
-  // Reading list not supported for custom sites
-  btnSaveLater.classList.add('hidden');
+    rlConfirm.onclick = confirm;
+    $('rl-category-input').onkeydown = (e) => { if (e.key === 'Enter') confirm(); };
+  }
 }
 
 // ── Reading-list picker ───────────────────────────────────────────────────────
 
 async function loadRLCategoryHints() {
   const { readingList } = await send('GET_READING_LIST');
-  const cats = [...new Set((readingList || []).map((r) => r.userCategory).filter(Boolean))];
+  const sortedList = (readingList || []).sort((a, b) => b.savedAt - a.savedAt);
+  const allCats = [...new Set(sortedList.map((r) => r.userCategory).filter(Boolean))];
+  
+  const input = $('rl-category-input');
+  const dropdown = $('rl-dropdown');
+  
+  function renderDropdown(filterText = '') {
+    const q = filterText.toLowerCase();
+    const filtered = allCats.filter(c => c.toLowerCase().includes(q));
+    dropdown.innerHTML = '';
+    if (filtered.length === 0 || (filtered.length === 1 && filtered[0].toLowerCase() === q)) {
+      dropdown.classList.add('hidden');
+      return;
+    }
+    filtered.forEach(cat => {
+      const el = document.createElement('div');
+      el.className = 'rl-dropdown-item';
+      el.textContent = cat;
+      el.onmousedown = (e) => {
+        e.preventDefault(); // prevent input blur
+        input.value = cat;
+        dropdown.classList.add('hidden');
+      };
+      dropdown.appendChild(el);
+    });
+    dropdown.classList.remove('hidden');
+  }
+
+  input.addEventListener('focus', () => renderDropdown(input.value));
+  input.addEventListener('input', () => renderDropdown(input.value));
+  input.addEventListener('blur', () => dropdown.classList.add('hidden'));
+
+  const recentCats = allCats.slice(0, 5);
   const container = $('rl-existing-cats');
   container.innerHTML = '';
-  cats.forEach((cat) => {
+  recentCats.forEach((cat) => {
     const pill = document.createElement('button');
     pill.className = 'rl-cat-pill';
     pill.textContent = cat;
@@ -191,53 +205,6 @@ async function loadRLCategoryHints() {
     });
     container.appendChild(pill);
   });
-}
-
-function showRLPicker(tab) {
-  const picker = $('rl-picker');
-  picker.classList.remove('hidden');
-  $('rl-category-input').value = '';
-  $('btn-save-later').disabled = true;
-  loadRLCategoryHints();
-
-  $('rl-cancel').onclick = () => {
-    picker.classList.add('hidden');
-    $('btn-save-later').disabled = false;
-  };
-
-  const confirm = async () => {
-    const cat = $('rl-category-input').value.trim() || 'General';
-    
-    // 1. Aggiunge alla lista di lettura (per leggere dopo)
-    const respRL = await send('ADD_TO_READING_LIST', { url: tab.url, title: tab.title, userCategory: cat });
-    
-    // 2. AGGIORNAMENTO FIX: Invia un comando anche per catalogare la pagina nel grafo
-    // Questo comando deve andare a colpire il record creato dall'automatico
-    await send('MANUAL_SAVE', { 
-      tabId: tab.id, 
-      url: tab.url, 
-      title: tab.title,
-      category: cat // Passiamo la categoria scelta
-    });
-
-    picker.classList.add('hidden');
-    
-    if (respRL?.ok) {
-      flash('Catalogato in ' + cat);
-      $('btn-save-later').disabled = true;
-      $('btn-save-later').textContent = '🔖 In reading list';
-      
-      // Ricarichiamo la info della tab per far sparire "Fetching categories..."
-      await loadCurrentTab(); 
-      await loadStats();
-    } else {
-      flash('Error saving', '#f87171');
-      $('btn-save-later').disabled = false;
-    }
-  };
-
-  $('rl-confirm').onclick = confirm;
-  $('rl-category-input').onkeydown = (e) => { if (e.key === 'Enter') confirm(); };
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────

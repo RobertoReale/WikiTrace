@@ -42,6 +42,7 @@ let allWikiPages = [];
 let allReadingList = [];
 let rlSearchQuery = '';
 let rlActiveCategory = null;
+let rlActiveDomain = null;
 
 // ─── Data loading ─────────────────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ function updateSiteSelector() {
 function getCategories() {
   const counts = {};
   for (const p of allPages) {
-    const c = p.primaryCategory || 'Uncategorized';
+    const c = p.userCategory || p.primaryCategory || 'Uncategorized';
     counts[c] = (counts[c] || 0) + 1;
   }
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -136,6 +137,62 @@ function renderCategoryFilter() {
 }
 
 // ─── Reading list helpers ─────────────────────────────────────────────────────
+
+function getDomain(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); }
+  catch { return 'Unknown'; }
+}
+
+function getRLDomains() {
+  const counts = {};
+  for (const r of allReadingList) {
+    const d = getDomain(r.url);
+    counts[d] = (counts[d] || 0) + 1;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+function renderRLDomainFilter() {
+  const domains = getRLDomains();
+  if (rlActiveDomain === undefined) rlActiveDomain = null;
+
+  const container = $('rl-domain-filter-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (domains.length === 0) {
+    container.innerHTML = '<span style="color:var(--text3);font-size:11px;">No sites yet</span>';
+    return;
+  }
+
+  const allEl = document.createElement('div');
+  allEl.className = 'cat-item' + (rlActiveDomain === null ? ' active' : '');
+  allEl.innerHTML = '<span class="cat-name">All sites</span>';
+  allEl.addEventListener('click', () => { rlActiveDomain = null; renderRLDomainFilter(); renderReadingList(); });
+  container.appendChild(allEl);
+
+  for (const [dom, count] of domains) {
+    const el = document.createElement('div');
+    el.className = 'cat-item' + (rlActiveDomain === dom ? ' active' : '');
+
+    const name = document.createElement('span');
+    name.className = 'cat-name';
+    name.title = dom;
+    name.textContent = dom;
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'cat-count';
+    countSpan.textContent = count;
+
+    el.append(name, countSpan);
+    el.addEventListener('click', () => {
+      rlActiveDomain = rlActiveDomain === dom ? null : dom;
+      renderRLDomainFilter();
+      renderReadingList();
+    });
+    container.appendChild(el);
+  }
+}
 
 function getRLCategories() {
   const counts = {};
@@ -191,15 +248,119 @@ function renderRLCategoryFilter() {
   }
 }
 
+function renderRLActiveFiltersBar() {
+  const container = $('rl-active-filters');
+  if (!container) return;
+
+  const hasSearch = !!rlSearchQuery;
+  const hasCat = rlActiveCategory !== null;
+  const hasDomain = rlActiveDomain !== null;
+  const hasSort = rlSortKey !== 'date-desc';
+
+  if (!hasSearch && !hasCat && !hasDomain && !hasSort) {
+    container.classList.add('hidden');
+    return;
+  }
+
+  container.innerHTML = '';
+  container.classList.remove('hidden');
+
+  if (hasSearch) {
+    const tag = document.createElement('div');
+    tag.className = 'filter-tag';
+    tag.innerHTML = `<span class="filter-tag-label">Search:</span> "${escHtml(rlSearchQuery)}" 
+                     <button class="filter-tag-close" title="Clear search">&times;</button>`;
+    tag.querySelector('.filter-tag-close').onclick = () => {
+      rlSearchQuery = '';
+      $('rl-search-input').value = '';
+      renderReadingList();
+    };
+    container.appendChild(tag);
+  }
+
+  if (hasCat) {
+    const tag = document.createElement('div');
+    tag.className = 'filter-tag';
+    tag.innerHTML = `<span class="filter-tag-label">Category:</span> ${escHtml(rlActiveCategory)} 
+                     <button class="filter-tag-close" title="Clear category">&times;</button>`;
+    tag.querySelector('.filter-tag-close').onclick = () => {
+      rlActiveCategory = null;
+      renderRLCategoryFilter();
+      renderReadingList();
+    };
+    container.appendChild(tag);
+  }
+
+  if (hasDomain) {
+    const tag = document.createElement('div');
+    tag.className = 'filter-tag';
+    tag.innerHTML = `<span class="filter-tag-label">Site:</span> ${escHtml(rlActiveDomain)} 
+                     <button class="filter-tag-close" title="Clear site">&times;</button>`;
+    tag.querySelector('.filter-tag-close').onclick = () => {
+      rlActiveDomain = null;
+      renderRLDomainFilter();
+      renderReadingList();
+    };
+    container.appendChild(tag);
+  }
+
+  if (hasSort) {
+    let sortName = '';
+    switch(rlSortKey) {
+      case 'date-asc': sortName = 'Date ↑'; break;
+      case 'title': sortName = 'Title A-Z'; break;
+      case 'domain': sortName = 'Domain'; break;
+      case 'category': sortName = 'Category'; break;
+    }
+    const tag = document.createElement('div');
+    tag.className = 'filter-tag';
+    tag.innerHTML = `<span class="filter-tag-label">Sort:</span> ${sortName} 
+                     <button class="filter-tag-close" title="Reset sort">&times;</button>`;
+    tag.querySelector('.filter-tag-close').onclick = () => {
+      rlSortKey = 'date-desc';
+      document.querySelectorAll('.rl-sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === 'date-desc'));
+      renderReadingList();
+    };
+    container.appendChild(tag);
+  }
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'btn-clear-filters';
+  clearBtn.textContent = 'Clear all filters';
+  clearBtn.onclick = () => {
+    rlSearchQuery = '';
+    $('rl-search-input').value = '';
+    rlActiveCategory = null;
+    rlActiveDomain = null;
+    rlSortKey = 'date-desc';
+    document.querySelectorAll('.rl-sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === 'date-desc'));
+    renderRLCategoryFilter();
+    renderRLDomainFilter();
+    renderReadingList();
+  };
+  container.appendChild(clearBtn);
+}
+
 function renderReadingList() {
+  renderRLActiveFiltersBar();
   const container = $('rl-view');
   const visitedUrls = new Set(allWikiPages.map((p) => p.url));
   const q = rlSearchQuery.toLowerCase();
 
   const items = allReadingList.filter((r) => {
     if (rlActiveCategory && r.userCategory !== rlActiveCategory) return false;
-    if (q && !r.title.toLowerCase().includes(q) && !(r.userCategory || '').toLowerCase().includes(q)) return false;
+    if (rlActiveDomain && getDomain(r.url) !== rlActiveDomain) return false;
+    if (q && !r.title.toLowerCase().includes(q) && !(r.userCategory || '').toLowerCase().includes(q) && !getDomain(r.url).includes(q)) return false;
     return true;
+  }).sort((a, b) => {
+    switch (rlSortKey) {
+      case 'date-asc':  return a.savedAt - b.savedAt;
+      case 'date-desc': return b.savedAt - a.savedAt;
+      case 'title':     return a.title.localeCompare(b.title);
+      case 'domain':    return getDomain(a.url).localeCompare(getDomain(b.url));
+      case 'category':  return (a.userCategory || 'zzz').localeCompare(b.userCategory || 'zzz');
+      default:          return b.savedAt - a.savedAt;
+    }
   });
 
   if (items.length === 0) {
@@ -212,19 +373,16 @@ function renderReadingList() {
   }
 
   const rows = items.map((r) => {
-    const visited = visitedUrls.has(r.url);
-    const badge = visited
-      ? '<span class="rl-badge rl-badge-visited">Visited</span>'
-      : '<span class="rl-badge rl-badge-unread">Unread</span>';
     const cat = r.userCategory || 'General';
     const color = catColor(cat);
     const bg = color.replace('hsl(', 'hsla(').replace(')', ',0.15)');
+    const dom = getDomain(r.url);
     return `
       <tr data-rl-id="${r.id}">
         <td class="col-title"><a href="${r.url}" target="_blank">${escHtml(r.title)}</a></td>
         <td class="col-date">${formatDate(r.savedAt)}</td>
+        <td class="col-domain"><span style="font-size:11px;color:var(--text3);">${escHtml(dom)}</span></td>
         <td class="col-cat"><span class="cat-pill" style="color:${color};background:${bg}">${escHtml(cat)}</span></td>
-        <td class="col-cat">${badge}</td>
         <td class="col-actions">
           <button class="rl-mark-read" data-rl-read="${r.id}" title="Mark as read">✓ Read</button>
           <button class="rl-remove" data-rl-del="${r.id}" title="Remove">&times;</button>
@@ -235,7 +393,7 @@ function renderReadingList() {
   container.innerHTML = `
     <table>
       <thead><tr>
-        <th>Title</th><th>Saved</th><th>Category</th><th>Status</th><th></th>
+        <th>Title</th><th>Saved</th><th>Domain</th><th>Category</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
@@ -257,6 +415,7 @@ function renderReadingList() {
       await send('REMOVE_FROM_READING_LIST', { id });
       allReadingList = allReadingList.filter((r) => r.id !== id);
       renderRLCategoryFilter();
+      renderRLDomainFilter();
       renderReadingList();
     });
   });
@@ -271,7 +430,7 @@ function renderRLStats() {
 
 function renderStats() {
   if (currentSite === 'wikipedia') {
-    const cats = new Set(allPages.map((p) => p.primaryCategory).filter(Boolean));
+    const cats = new Set(allPages.map((p) => p.userCategory || p.primaryCategory).filter(Boolean));
     $('topbar-stats').textContent =
       `${allPages.length} page${allPages.length !== 1 ? 's' : ''} · ${cats.size} categories`;
   } else {
@@ -297,7 +456,7 @@ function filteredPages() {
         case 'date-asc':  return a.timestamp - b.timestamp;
         case 'date-desc': return b.timestamp - a.timestamp;
         case 'title':     return a.title.localeCompare(b.title);
-        case 'category':  return (a.primaryCategory || 'zzz').localeCompare(b.primaryCategory || 'zzz');
+        case 'category':  return (a.userCategory || a.primaryCategory || 'zzz').localeCompare(b.userCategory || b.primaryCategory || 'zzz');
         default: return 0;
       }
     });
@@ -393,6 +552,7 @@ $('site-selector').addEventListener('change', async (e) => {
 document.querySelectorAll('.tab').forEach((btn) => {
   btn.addEventListener('click', () => {
     currentTab = btn.dataset.tab;
+    window.location.hash = currentTab;
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b === btn));
     $('panel-list').classList.toggle('hidden', currentTab !== 'list');
     $('panel-graph').classList.toggle('hidden', currentTab !== 'graph');
@@ -407,24 +567,48 @@ document.querySelectorAll('.tab').forEach((btn) => {
       currentSite !== 'wikipedia' || currentTab === 'readinglist' || currentTab === 'sites');
     $('rl-controls').classList.toggle('hidden', currentTab !== 'readinglist');
     $('rl-cat-section').classList.toggle('hidden', currentTab !== 'readinglist');
+    $('rl-domain-section').classList.toggle('hidden', currentTab !== 'readinglist');
     $('btn-export-svg').classList.toggle('hidden', currentTab !== 'graph');
     $('btn-export-png').classList.toggle('hidden', currentTab !== 'graph');
-    if (currentTab === 'graph') graphView.init(allPages);
-    if (currentTab === 'readinglist') {
-      renderRLStats();
-      renderRLCategoryFilter();
-      renderReadingList();
-    } else if (currentTab === 'sites') {
-      renderSitesPanel();
-    } else {
-      renderStats();
-    }
+    
+    (async () => {
+      if (currentTab === 'graph') {
+        await loadPages();
+        graphView.init(allPages);
+      }
+      if (currentTab === 'readinglist') {
+        await loadReadingList();
+        renderRLStats();
+        renderRLCategoryFilter();
+        renderRLDomainFilter();
+        renderReadingList();
+      } else if (currentTab === 'sites') {
+        renderSitesPanel();
+      } else if (currentTab === 'list') {
+        await loadPages();
+        renderStats();
+        renderCategoryFilter();
+        renderList();
+      } else {
+        renderStats();
+      }
+    })();
   });
 });
 
 $('rl-search-input').addEventListener('input', (e) => {
   rlSearchQuery = e.target.value;
   renderReadingList();
+});
+
+let rlSortKey = 'date-desc';
+document.querySelectorAll('.rl-sort-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    rlSortKey = btn.dataset.sort;
+    document.querySelectorAll('.rl-sort-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderReadingList();
+  });
 });
 
 // ─── Sites panel ──────────────────────────────────────────────────────────────
@@ -1108,8 +1292,16 @@ $('btn-theme').addEventListener('click', async () => {
   const { settings } = await send('GET_SETTINGS');
   applyTheme(settings.theme ?? 'dark');
   await Promise.all([loadPages(), loadReadingList(), loadSiteSelector()]);
-  renderStats();
-  renderCategoryFilter();
-  renderList();
-  graphView.applyFilter(activeCategories);
+  
+  const hash = window.location.hash.slice(1);
+  const tabBtn = document.querySelector(`.tab[data-tab="${hash}"]`);
+  
+  if (tabBtn) {
+    tabBtn.click();
+  } else {
+    renderStats();
+    renderCategoryFilter();
+    renderList();
+    graphView.applyFilter(activeCategories);
+  }
 })();

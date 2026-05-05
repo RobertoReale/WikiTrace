@@ -666,7 +666,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'GET_PAGE_STATUS': {
-        const { pages = {}, readingList = {} } = await storageGet(['pages', 'readingList']);
+        let { pages = {}, readingList = {} } = await storageGet(['pages', 'readingList']);
+        if (!readingList || Array.isArray(readingList)) {
+          const obj = {};
+          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
+          readingList = obj;
+        }
         const normalUrl = normalizeUrl(msg.url);
         const slug = extractSlug(normalUrl);
         const found = Object.values(pages).find(
@@ -701,13 +706,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'GET_READING_LIST': {
-        const { readingList = {} } = await storageGet('readingList');
+        let { readingList = {} } = await storageGet('readingList');
+        if (!readingList || Array.isArray(readingList)) {
+          const obj = {};
+          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
+          readingList = obj;
+          await storageSet({ readingList });
+        }
         sendResponse({ readingList: Object.values(readingList) });
         break;
       }
 
       case 'ADD_TO_READING_LIST': {
-        const { readingList = {} } = await storageGet('readingList');
+        let { readingList = {} } = await storageGet('readingList');
+        if (!readingList || Array.isArray(readingList)) {
+          const obj = {};
+          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
+          readingList = obj;
+        }
         const normalUrl = normalizeUrl(msg.url);
         const existing = Object.values(readingList).find((r) => r.url === normalUrl);
         if (existing) { sendResponse({ ok: true, id: existing.id, alreadyExists: true }); return; }
@@ -723,7 +739,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'REMOVE_FROM_READING_LIST': {
-        const { readingList = {} } = await storageGet('readingList');
+        let { readingList = {} } = await storageGet('readingList');
+        if (!readingList || Array.isArray(readingList)) {
+          const obj = {};
+          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
+          readingList = obj;
+        }
         delete readingList[msg.id];
         await storageSet({ readingList });
         sendResponse({ ok: true });
@@ -731,7 +752,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'MARK_AS_READ': {
-        const { readingList = {} } = await storageGet('readingList');
+        let { readingList = {} } = await storageGet('readingList');
+        if (!readingList || Array.isArray(readingList)) {
+          const obj = {};
+          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
+          readingList = obj;
+        }
         const item = readingList[msg.id];
         if (!item) { sendResponse({ ok: false, error: 'Not found' }); return; }
         delete readingList[msg.id];
