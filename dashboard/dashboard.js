@@ -287,7 +287,7 @@ function filteredPages() {
   const q = searchQuery.toLowerCase();
   return allPages
     .filter((p) => {
-      const cat = p.primaryCategory || 'Uncategorized';
+      const cat = p.userCategory || p.primaryCategory || 'Uncategorized';
       if (activeCategories && !activeCategories.has(cat)) return false;
       if (q && !p.title.toLowerCase().includes(q) && !cat.toLowerCase().includes(q)) return false;
       return true;
@@ -317,7 +317,7 @@ function renderList() {
   }
 
   const rows = pages.map((p) => {
-    const cat = p.primaryCategory || 'Uncategorized';
+    const cat = p.userCategory || p.primaryCategory || 'Uncategorized';
     const color = catColor(cat);
     const bg = color.replace('hsl(', 'hsla(').replace(')', ',0.15)');
     return `
@@ -858,7 +858,7 @@ const graphView = (() => {
     const cachedPos = JSON.parse(localStorage.getItem(posKey) || '{}');
     nodesData = pages.map((p) => ({
       id: p.id, title: p.title, url: p.url,
-      category: p.primaryCategory || 'Uncategorized',
+      category: p.userCategory || p.primaryCategory || 'Uncategorized',
       timestamp: p.timestamp,
       x: cachedPos[p.id]?.x ?? W / 2 + (Math.random() - 0.5) * 200,
       y: cachedPos[p.id]?.y ?? H / 2 + (Math.random() - 0.5) * 200,

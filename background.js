@@ -464,7 +464,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const state = tabState[tabId] ?? {};
         const url = msg.url || state.pendingUrl;
         if (!url) { sendResponse({ ok: false, error: 'No URL' }); return; }
-        const id = await savePage({ url, title: msg.title || null, parentId: state.pendingParentId ?? null });
+        const id = await savePage({ url, title: msg.title || null, parentId: state.pendingParentId ?? null, userCategory: msg.category });
         if (!id) { sendResponse({ ok: false, error: 'Not a Wikipedia page' }); return; }
         if (tabId != null) { tabState[tabId] = { pageId: id, url }; showBadge(tabId); }
         sendResponse({ ok: true, id });
@@ -736,7 +736,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (!item) { sendResponse({ ok: false, error: 'Not found' }); return; }
         delete readingList[msg.id];
         await storageSet({ readingList });
-        const pageId = await savePage({ url: item.url, title: item.title, parentId: null });
+        
+        const pageId = await savePage({ url: item.url, title: item.title, parentId: null, userCategory: item.userCategory });
+        
         sendResponse({ ok: true, pageId });
         break;
       }

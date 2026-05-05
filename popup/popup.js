@@ -72,13 +72,15 @@ async function loadCurrentTab() {
 
   if (saved) {
     titleEl.insertAdjacentHTML('beforeend', ' <span class="badge badge-saved">Saved</span>');
-    if (page?.categories?.length) {
-      catsEl.textContent = page.categories.join(' · ');
-    } else {
-      catsEl.textContent = 'Fetching categories…';
-      catsEl.style.fontStyle = 'italic';
-      catsEl.style.opacity = '0.5';
-    }
+    if (page?.userCategory) {
+        catsEl.textContent = page.userCategory;
+      } else if (page?.categories?.length) {
+        catsEl.textContent = page.categories.join(' · ');
+      } else {
+        catsEl.textContent = 'Fetching categories…';
+        catsEl.style.fontStyle = 'italic';
+        catsEl.style.opacity = '0.5';
+      }
     if (page?.timestamp) {
       const date = new Date(page.timestamp).toLocaleDateString();
       const visits = page.visitCount || 1;
