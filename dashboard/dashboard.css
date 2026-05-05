@@ -167,19 +167,21 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
 .graph-view { flex: 1; position: relative; overflow: hidden; }
 #graph-svg { width: 100%; height: 100%; display: block; }
 
-.node circle { stroke-width: 1.5px; cursor: pointer; transition: r .15s; }
-.node circle:hover { r: 9; }
+.node circle { stroke-width: 1.5px; cursor: pointer; transition: r .15s, opacity .2s, stroke-width .2s; }
+.node circle:hover { r: 12 !important; stroke-width: 2px; }
 .node text {
   pointer-events: none; font-size: 10px; fill: var(--text);
   text-shadow: 0 0 3px var(--bg0), 0 0 3px var(--bg0);
+  transition: opacity .2s;
 }
-.link { stroke: var(--text2); stroke-opacity: 0.4; }
+.link { stroke: var(--text2); stroke-opacity: 0.4; fill: none; transition: stroke-opacity .2s, stroke-width .2s; }
 .link.nav  { stroke-dasharray: none; }
 .link.chrono { stroke-dasharray: 4 3; }
 .hull { pointer-events: none; }
 .cluster-label {
-  pointer-events: none; font-size: 11px; font-weight: 700;
-  letter-spacing: .04em; text-transform: uppercase; fill-opacity: .7;
+  pointer-events: none; font-size: 10px; font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase; fill-opacity: .4;
+  transition: fill-opacity .2s;
 }
 
 .graph-legend {
@@ -214,24 +216,48 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
   font-size: 12px; z-index: 100; pointer-events: none;
 }
 
+.graph-controls {
+  position: absolute; bottom: 16px; left: 16px;
+  display: flex; flex-direction: column; gap: 4px;
+  z-index: 10;
+}
+.graph-controls button {
+  width: 28px; height: 28px;
+  background: var(--bg0-glass); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s;
+}
+.graph-controls button:hover {
+  background: var(--bg1); color: var(--accent);
+}
+
 .hidden { display: none !important; }
 .panel { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
 .graph-tooltip {
   position: fixed;
-  background: var(--bg1);
+  background: var(--bg0-glass);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-size: 11px;
   color: var(--text);
   pointer-events: none;
   z-index: 50;
-  max-width: 220px;
+  max-width: 240px;
   line-height: 1.5;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transition: opacity 0.15s ease-out;
+  opacity: 0;
 }
-.graph-tooltip .tt-title { font-weight: 600; }
-.graph-tooltip .tt-date { color: var(--text3); margin-top: 2px; }
+.graph-tooltip:not(.hidden) {
+  opacity: 1;
+}
+.graph-tooltip .tt-title { font-weight: 600; font-size: 12px; margin-bottom: 3px; }
+.graph-tooltip .tt-date { color: var(--text3); }
 
 .btn-theme {
   width: 30px; height: 28px; border: 1px solid var(--border);

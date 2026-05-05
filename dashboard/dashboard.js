@@ -1035,20 +1035,41 @@ const graphView = (() => {
     svgRoot = svg;
     gMain = svg.append('g');
 
-    svg.call(d3.zoom().scaleExtent([0.05, 8]).on('zoom', (e) => {
+    const zoomBehavior = d3.zoom().scaleExtent([0.05, 8]).on('zoom', (e) => {
       gMain.attr('transform', e.transform);
-    }));
+    });
+    svg.call(zoomBehavior);
+
+    d3.select('#btn-zoom-in').on('click', () => svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.3));
+    d3.select('#btn-zoom-out').on('click', () => svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.7));
+    d3.select('#btn-zoom-reset').on('click', () => svg.transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity));
 
     const cachedPos = JSON.parse(localStorage.getItem(posKey) || '{}');
+    linksData = buildEdges(pages);
+
+    const degree = {};
+    for (const p of pages) degree[p.id] = 0;
+    for (const e of linksData) {
+      degree[e.source]++;
+      degree[e.target]++;
+    }
+
     nodesData = pages.map((p) => ({
       id: p.id, title: p.title, url: p.url,
       category: p.userCategory || p.primaryCategory || 'Uncategorized',
       timestamp: p.timestamp,
+      r: Math.min(20, Math.max(7, 5 + Math.sqrt(degree[p.id] || 0) * 1.5)),
       x: cachedPos[p.id]?.x ?? W / 2 + (Math.random() - 0.5) * 200,
       y: cachedPos[p.id]?.y ?? H / 2 + (Math.random() - 0.5) * 200,
     }));
 
-    linksData = buildEdges(pages);
+    const adjacent = new Set();
+    for (const e of linksData) {
+      adjacent.add(`${e.source},${e.target}`);
+      adjacent.add(`${e.target},${e.source}`);
+    }
+    const isConnected = (a, b) => a === b || adjacent.has(`${a},${b}`);
+
     const categories = [...new Set(nodesData.map((n) => n.category))];
     const allNewNodes = nodesData.some((n) => !cachedPos[n.id]);
 
@@ -1070,7 +1091,7 @@ const graphView = (() => {
         .on('end',   (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
 
     nodeG.append('circle')
-      .attr('r', 7)
+      .attr('r', (d) => d.r)
       .attr('fill', (d) => catColor(d.category))
       .attr('stroke', (d) => catColor(d.category).replace('58%)', '78%)'));
 
@@ -1087,15 +1108,30 @@ const graphView = (() => {
         tooltip.querySelector('.tt-title').textContent = d.title;
         tooltip.querySelector('.tt-date').textContent = formatDate(d.timestamp);
         tooltip.classList.remove('hidden');
+        
+        nodeG.style('opacity', n => isConnected(d.id, n.id) ? 1 : 0.08);
+        nodeG.selectAll('text').style('opacity', n => isConnected(d.id, n.id) ? 1 : 0);
+        link.style('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.04)
+            .style('stroke-width', l => (l.source.id === d.id || l.target.id === d.id) ? 2 : 1.2);
       })
       .on('mousemove', (e) => {
         tooltip.style.left = (e.clientX + 14) + 'px';
         tooltip.style.top  = (e.clientY - 8) + 'px';
       })
-      .on('mouseleave', () => tooltip.classList.add('hidden'))
+      .on('mouseleave', () => {
+        tooltip.classList.add('hidden');
+        if (activeFilter) {
+          applyFilter(activeFilter);
+        } else {
+          nodeG.style('opacity', 1);
+          nodeG.selectAll('text').style('opacity', n => n.r > 9 ? 1 : 0);
+          link.style('stroke-opacity', 0.4).style('stroke-width', 1.2);
+        }
+      })
       .on('click', (e, d) => { if (!e.defaultPrevented) chrome.tabs.create({ url: d.url }); });
 
-    nodeG.append('text').attr('dx', 10).attr('dy', '.35em')
+    nodeG.append('text').attr('dx', (d) => d.r + 3).attr('dy', '.35em')
+      .style('opacity', (d) => d.r > 9 ? 1 : 0)
       .text((d) => d.title.length > 28 ? d.title.slice(0, 26) + '…' : d.title);
 
     const isLarge = pages.length > 500;
@@ -1103,7 +1139,7 @@ const graphView = (() => {
       .force('link', d3.forceLink(linksData).id((d) => d.id).distance(70).strength(0.4))
       .force('charge', d3.forceManyBody().strength(-180).distanceMax(isLarge ? 250 : 400))
       .force('center', d3.forceCenter(W / 2, H / 2).strength(0.04))
-      .force('collision', d3.forceCollide(15).strength(0.7))
+      .force('collision', d3.forceCollide((d) => d.r + 8).strength(0.7))
       .force('cluster', forceCluster())
       .alphaDecay(isLarge ? 0.08 : 0.04).velocityDecay(0.38);
 
@@ -1249,11 +1285,15 @@ const graphView = (() => {
     const svg = d3.select('#graph-svg');
     svg.selectAll('.node').style('opacity', (d) =>
       !filter || filter.has(d.category) ? 1 : 0.08);
-    svg.selectAll('.link').style('opacity', (d) => {
-      const srcCat = d.source.category;
-      const tgtCat = d.target.category;
-      return !filter || (filter.has(srcCat) && filter.has(tgtCat)) ? 0.4 : 0.04;
-    });
+    svg.selectAll('.node text').style('opacity', (d) =>
+      (!filter || filter.has(d.category)) && d.r > 9 ? 1 : 0);
+    svg.selectAll('.link')
+      .style('stroke-opacity', (d) => {
+        const srcCat = d.source.category;
+        const tgtCat = d.target.category;
+        return !filter || (filter.has(srcCat) && filter.has(tgtCat)) ? 0.4 : 0.04;
+      })
+      .style('stroke-width', 1.2);
     const categories = [...new Set(nodesData.map((n) => n.category))];
     updateHulls(categories, gMain.select('.hulls'), gMain.select('.cluster-labels'));
   }
