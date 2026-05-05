@@ -1043,6 +1043,12 @@ const graphView = (() => {
     d3.select('#btn-zoom-in').on('click', () => svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.3));
     d3.select('#btn-zoom-out').on('click', () => svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.7));
     d3.select('#btn-zoom-reset').on('click', () => svg.transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity));
+    d3.select('#btn-reset-layout').on('click', () => {
+      if (confirm('Are you sure you want to reset the graph layout?')) {
+        localStorage.removeItem(posKey);
+        graphView.rebuild(pages);
+      }
+    });
 
     const cachedPos = JSON.parse(localStorage.getItem(posKey) || '{}');
     linksData = buildEdges(pages);
