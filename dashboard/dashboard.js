@@ -379,7 +379,7 @@ function renderReadingList() {
     const dom = getDomain(r.url);
     return `
       <tr data-rl-id="${r.id}">
-        <td class="col-title"><a href="${r.url}" target="_blank">${escHtml(r.title)}</a></td>
+        <td class="col-title"><a href="${escHtml(r.url)}" target="_blank">${escHtml(r.title)}</a></td>
         <td class="col-date">${formatDate(r.savedAt)}</td>
         <td class="col-domain"><span style="font-size:11px;color:var(--text3);">${escHtml(dom)}</span></td>
         <td class="col-cat"><span class="cat-pill" style="color:${color};background:${bg}">${escHtml(cat)}</span></td>
@@ -481,7 +481,7 @@ function renderList() {
     const bg = color.replace('hsl(', 'hsla(').replace(')', ',0.15)');
     return `
       <tr data-id="${p.id}">
-        <td class="col-title"><a href="${p.url}" target="_blank">${escHtml(p.title)}</a></td>
+        <td class="col-title"><a href="${escHtml(p.url)}" target="_blank">${escHtml(p.title)}</a></td>
         <td class="col-date">${formatDate(p.timestamp)}</td>
         <td class="col-cat"><span class="cat-pill" style="color:${color};background:${bg}">${escHtml(cat)}</span></td>
         <td class="col-del"><button title="Remove" data-del="${p.id}">&times;</button></td>
@@ -515,7 +515,7 @@ function renderList() {
 }
 
 function escHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ─── Sort buttons ─────────────────────────────────────────────────────────────

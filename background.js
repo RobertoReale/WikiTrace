@@ -18,7 +18,36 @@ const NOISE_RE = [
 
 // ─── In-memory state ──────────────────────────────────────────────────────────
 
-const tabState = {};
+class StorageMutex {
+  constructor() { this.queue = Promise.resolve(); }
+  async run(task) {
+    const prev = this.queue;
+    let resolveTask;
+    this.queue = new Promise(r => resolveTask = r);
+    await prev.catch(() => {});
+    try { return await task(); }
+    finally { resolveTask(); }
+  }
+}
+const storageMutex = new StorageMutex();
+
+async function getTabState(tabId) {
+  if (!tabId) return null;
+  const key = `tab_${tabId}`;
+  const res = await new Promise(resolve => chrome.storage.session.get(key, resolve));
+  return res[key] || null;
+}
+async function setTabState(tabId, state) {
+  if (!tabId) return;
+  const key = `tab_${tabId}`;
+  await new Promise(resolve => chrome.storage.session.set({ [key]: state }, resolve));
+}
+async function deleteTabState(tabId) {
+  if (!tabId) return;
+  const key = `tab_${tabId}`;
+  await new Promise(resolve => chrome.storage.session.remove(key, resolve));
+}
+
 const apiQueue = [];
 let queueTimer = null;
 let cachedTrackedSites = null;
@@ -48,6 +77,17 @@ function storageSet(data) {
       chrome.runtime.lastError ? reject(chrome.runtime.lastError) : resolve()
     )
   );
+}
+
+async function getReadingListMap() {
+  let { readingList = {} } = await storageGet('readingList');
+  if (!readingList || Array.isArray(readingList)) {
+    const obj = {};
+    if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
+    readingList = obj;
+    await storageSet({ readingList });
+  }
+  return readingList;
 }
 
 // ─── Badge & icon feedback ────────────────────────────────────────────────────
@@ -242,82 +282,85 @@ async function savePage({ url, title, parentId, userCategory = null }) {
   const info = extractWikiInfo(url);
   if (!info) return null;
 
-  const { pages = {} } = await storageGet('pages');
-  const slug = extractSlug(normalUrl);
-  
-  // Cerchiamo se la pagina è già stata tracciata (es. dal sistema Automatic)
-  const existing = Object.values(pages).find(
-    (p) => p.url === normalUrl || (slug && extractSlug(p.url) === slug)
-  );
+  return await storageMutex.run(async () => {
+    const { pages = {} } = await storageGet('pages');
+    const slug = extractSlug(normalUrl);
+    
+    // Cerchiamo se la pagina è già stata tracciata (es. dal sistema Automatic)
+    const existing = Object.values(pages).find(
+      (p) => p.url === normalUrl || (slug && extractSlug(p.url) === slug)
+    );
 
-  if (existing) {
-    // FIX: Se la pagina esiste già e l'utente ha inserito una categoria, la aggiorniamo
-    if (userCategory) {
-      const { pages: current = {} } = await storageGet('pages');
-      if (current[existing.id]) {
-        current[existing.id].userCategory = userCategory; // Salviamo la tua categoria personalizzata
-        await storageSet({ pages: current });
+    if (existing) {
+      if (userCategory) {
+        pages[existing.id].userCategory = userCategory;
+        await storageSet({ pages });
       }
+      return existing.id;
     }
-    return existing.id; // Ritorniamo l'ID esistente per non creare duplicati nel grafo
-  }
 
-  // Se la pagina è nuova, creiamo il record completo
-  const id = generateId();
-  const entry = {
-    id, 
-    url: normalUrl,
-    title: title || info.title,
-    timestamp: Date.now(),
-    parentId: parentId || null,
-    categories: [],           // Categorie automatiche di Wikipedia
-    primaryCategory: null,
-    userCategory: userCategory, // La tua categoria (es. "Science")
-    visitCount: 1,
-  };
+    // Se la pagina è nuova, creiamo il record completo
+    const id = generateId();
+    const entry = {
+      id, 
+      url: normalUrl,
+      title: title || info.title,
+      timestamp: Date.now(),
+      parentId: parentId || null,
+      categories: [],
+      primaryCategory: null,
+      userCategory: userCategory,
+      visitCount: 1,
+    };
 
-  pages[id] = entry;
-  await storageSet({ pages });
+    pages[id] = entry;
+    await storageSet({ pages });
 
-  // Gestione del grafo
-  const { graphPositions = {} } = await storageGet('graphPositions');
-  if (!graphPositions[id]) await storageSet({ graphCacheDirty: true });
+    // Gestione del grafo
+    const { graphPositions = {} } = await storageGet('graphPositions');
+    if (!graphPositions[id]) await storageSet({ graphCacheDirty: true });
 
-  // Continua a scaricare le categorie di Wikipedia in background per il grafo
-  enqueueCategories(info.title, info.lang)
-    .then(async (cats) => {
-      const { pages: current = {} } = await storageGet('pages');
-      if (!current[id]) return;
-      current[id].categories = cats;
-      current[id].primaryCategory = cats[0] || null;
-      await storageSet({ pages: current });
-    })
-    .catch((e) => console.warn('WikiTrace: category fetch failed', e));
+    // Continua a scaricare le categorie di Wikipedia in background per il grafo
+    enqueueCategories(info.title, info.lang)
+      .then(async (cats) => {
+        await storageMutex.run(async () => {
+          const { pages: current = {} } = await storageGet('pages');
+          if (!current[id]) return;
+          current[id].categories = cats;
+          current[id].primaryCategory = cats[0] || null;
+          await storageSet({ pages: current });
+        });
+      })
+      .catch((e) => console.warn('WikiTrace: category fetch failed', e));
 
-  return id;
+    return id;
+  });
 }
 
 async function saveCustomPage({ domain, url, title, parentId }) {
   const normalUrl = normalizeUrl(url);
   const storeKey = `csite_${domain}`;
-  const stored = await storageGet(storeKey);
-  const pages = stored[storeKey] || {};
 
-  const existing = Object.values(pages).find((p) => p.url === normalUrl);
-  if (existing) return existing.id;
+  return await storageMutex.run(async () => {
+    const stored = await storageGet(storeKey);
+    const pages = stored[storeKey] || {};
 
-  const id = generateId();
-  pages[id] = {
-    id, url: normalUrl,
-    title: title || normalUrl,
-    timestamp: Date.now(),
-    parentId: parentId || null,
-    categories: [],
-    primaryCategory: null,
-    visitCount: 1,
-  };
-  await storageSet({ [storeKey]: pages });
-  return id;
+    const existing = Object.values(pages).find((p) => p.url === normalUrl);
+    if (existing) return existing.id;
+
+    const id = generateId();
+    pages[id] = {
+      id, url: normalUrl,
+      title: title || normalUrl,
+      timestamp: Date.now(),
+      parentId: parentId || null,
+      categories: [],
+      primaryCategory: null,
+      visitCount: 1,
+    };
+    await storageSet({ [storeKey]: pages });
+    return id;
+  });
 }
 
 // ─── Navigation listeners ─────────────────────────────────────────────────────
@@ -338,30 +381,36 @@ async function handleNavCompleted(details) {
   );
 
   if (existing) {
-    pages[existing.id].visitCount = (pages[existing.id].visitCount || 1) + 1;
-    await storageSet({ pages });
+    await storageMutex.run(async () => {
+      const { pages: curPages = {} } = await storageGet('pages');
+      if (curPages[existing.id]) {
+        curPages[existing.id].visitCount = (curPages[existing.id].visitCount || 1) + 1;
+        await storageSet({ pages: curPages });
+      }
+    });
     if (revisitNotify) setRevisitIcon(tabId); else resetIcon(tabId);
-    tabState[tabId] = { pageId: existing.id, url };
+    await setTabState(tabId, { pageId: existing.id, url });
     return;
   }
 
   resetIcon(tabId);
 
-  const fallbackParentId = tabState[tabId]?.pageId ?? null;
+  const state = await getTabState(tabId) || {};
+  const fallbackParentId = state.pageId ?? null;
   const parentId = await getReferrerId(tabId, fallbackParentId);
-  const hintTitle = tabState[tabId]?.pendingTitle ?? null;
+  const hintTitle = state.pendingTitle ?? null;
 
   if (mode === 'auto') {
     const id = await savePage({ url, title: hintTitle, parentId });
-    tabState[tabId] = { pageId: id, url };
+    await setTabState(tabId, { pageId: id, url });
     if (id) showBadge(tabId);
   } else {
-    tabState[tabId] = {
-      pageId: tabState[tabId]?.pageId ?? null,
+    await setTabState(tabId, {
+      pageId: state.pageId ?? null,
       pendingUrl: url,
       pendingParentId: parentId,
       pendingTitle: hintTitle,
-    };
+    });
   }
 }
 
@@ -391,32 +440,39 @@ async function handleCustomNavCompleted(details) {
   const existing = Object.values(pages).find((p) => p.url === normalUrl);
 
   if (existing) {
-    pages[existing.id].visitCount = (pages[existing.id].visitCount || 1) + 1;
-    await storageSet({ [storeKey]: pages });
+    await storageMutex.run(async () => {
+      const storedNow = await storageGet(storeKey);
+      const curPages = storedNow[storeKey] || {};
+      if (curPages[existing.id]) {
+        curPages[existing.id].visitCount = (curPages[existing.id].visitCount || 1) + 1;
+        await storageSet({ [storeKey]: curPages });
+      }
+    });
     if (revisitNotify) setRevisitIcon(tabId); else resetIcon(tabId);
-    tabState[tabId] = { pageId: existing.id, url, customDomain: site.domain };
+    await setTabState(tabId, { pageId: existing.id, url, customDomain: site.domain });
     return;
   }
 
   resetIcon(tabId);
-  const fallbackParentId = (tabState[tabId]?.customDomain === site.domain)
-    ? (tabState[tabId]?.pageId ?? null)
+  const state = await getTabState(tabId) || {};
+  const fallbackParentId = (state.customDomain === site.domain)
+    ? (state.pageId ?? null)
     : null;
 
   if (mode === 'auto') {
     const title = await getTabTitle(tabId);
     const id = await saveCustomPage({ domain: site.domain, url, title, parentId: fallbackParentId });
-    tabState[tabId] = { pageId: id, url, customDomain: site.domain };
+    await setTabState(tabId, { pageId: id, url, customDomain: site.domain });
     if (id) showBadge(tabId);
   } else {
     const title = await getTabTitle(tabId);
-    tabState[tabId] = {
-      pageId: tabState[tabId]?.pageId ?? null,
+    await setTabState(tabId, {
+      pageId: state.pageId ?? null,
       pendingUrl: url,
       pendingParentId: fallbackParentId,
       pendingTitle: title,
       customDomain: site.domain,
-    };
+    });
   }
 }
 
@@ -424,7 +480,7 @@ chrome.webNavigation.onCompleted.addListener(handleCustomNavCompleted, {
   url: [{ schemes: ['https', 'http'] }],
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => { delete tabState[tabId]; });
+chrome.tabs.onRemoved.addListener(async (tabId) => { await deleteTabState(tabId); });
 
 // ─── Message bus ──────────────────────────────────────────────────────────────
 
@@ -437,7 +493,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (!tabId) { sendResponse({ ok: false }); return; }
         const { settings = {} } = await storageGet('settings');
         if ((settings.saveMode ?? 'auto') !== 'scroll') { sendResponse({ ok: false }); return; }
-        const state = tabState[tabId];
+        const state = await getTabState(tabId);
         if (!state?.pendingUrl) { sendResponse({ ok: false }); return; }
 
         if (state.customDomain) {
@@ -447,12 +503,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             title: state.pendingTitle || null,
             parentId: state.pendingParentId || null,
           });
-          tabState[tabId] = { pageId: id, url: state.pendingUrl, customDomain: state.customDomain };
+          await setTabState(tabId, { pageId: id, url: state.pendingUrl, customDomain: state.customDomain });
           if (id) showBadge(tabId);
           sendResponse({ ok: true, id });
         } else {
           const id = await savePage({ url: state.pendingUrl, title: state.pendingTitle || null, parentId: state.pendingParentId });
-          tabState[tabId] = { pageId: id, url: state.pendingUrl };
+          await setTabState(tabId, { pageId: id, url: state.pendingUrl });
           if (id) showBadge(tabId);
           sendResponse({ ok: true, id });
         }
@@ -461,12 +517,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       case 'MANUAL_SAVE': {
         const tabId = msg.tabId;
-        const state = tabState[tabId] ?? {};
+        const state = await getTabState(tabId) || {};
         const url = msg.url || state.pendingUrl;
         if (!url) { sendResponse({ ok: false, error: 'No URL' }); return; }
         const id = await savePage({ url, title: msg.title || null, parentId: state.pendingParentId ?? null, userCategory: msg.category });
         if (!id) { sendResponse({ ok: false, error: 'Not a Wikipedia page' }); return; }
-        if (tabId != null) { tabState[tabId] = { pageId: id, url }; showBadge(tabId); }
+        if (tabId != null) { await setTabState(tabId, { pageId: id, url }); showBadge(tabId); }
         sendResponse({ ok: true, id });
         break;
       }
@@ -476,7 +532,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (!domain || !url) { sendResponse({ ok: false, error: 'Missing params' }); return; }
         const id = await saveCustomPage({ domain, url, title: title || null, parentId: null });
         if (!id) { sendResponse({ ok: false, error: 'Save failed' }); return; }
-        if (tabId != null) { tabState[tabId] = { pageId: id, url, customDomain: domain }; showBadge(tabId); }
+        if (tabId != null) { await setTabState(tabId, { pageId: id, url, customDomain: domain }); showBadge(tabId); }
         sendResponse({ ok: true, id });
         break;
       }
@@ -659,19 +715,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'LINK_HINT': {
         const tabId = sender.tab?.id;
         if (tabId && msg.url && msg.title) {
-          tabState[tabId] = { ...tabState[tabId], pendingTitle: msg.title };
+          const state = await getTabState(tabId) || {};
+          await setTabState(tabId, { ...state, pendingTitle: msg.title });
         }
         sendResponse({ ok: true });
         break;
       }
 
       case 'GET_PAGE_STATUS': {
-        let { pages = {}, readingList = {} } = await storageGet(['pages', 'readingList']);
-        if (!readingList || Array.isArray(readingList)) {
-          const obj = {};
-          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
-          readingList = obj;
-        }
+        const { pages = {} } = await storageGet('pages');
+        const readingList = await getReadingListMap();
         const normalUrl = normalizeUrl(msg.url);
         const slug = extractSlug(normalUrl);
         const found = Object.values(pages).find(
@@ -706,24 +759,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'GET_READING_LIST': {
-        let { readingList = {} } = await storageGet('readingList');
-        if (!readingList || Array.isArray(readingList)) {
-          const obj = {};
-          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
-          readingList = obj;
-          await storageSet({ readingList });
-        }
+        const readingList = await getReadingListMap();
         sendResponse({ readingList: Object.values(readingList) });
         break;
       }
 
       case 'ADD_TO_READING_LIST': {
-        let { readingList = {} } = await storageGet('readingList');
-        if (!readingList || Array.isArray(readingList)) {
-          const obj = {};
-          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
-          readingList = obj;
-        }
+        const readingList = await getReadingListMap();
         const normalUrl = normalizeUrl(msg.url);
         const existing = Object.values(readingList).find((r) => r.url === normalUrl);
         if (existing) { sendResponse({ ok: true, id: existing.id, alreadyExists: true }); return; }
@@ -739,12 +781,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'REMOVE_FROM_READING_LIST': {
-        let { readingList = {} } = await storageGet('readingList');
-        if (!readingList || Array.isArray(readingList)) {
-          const obj = {};
-          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
-          readingList = obj;
-        }
+        const readingList = await getReadingListMap();
         delete readingList[msg.id];
         await storageSet({ readingList });
         sendResponse({ ok: true });
@@ -752,12 +789,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'MARK_AS_READ': {
-        let { readingList = {} } = await storageGet('readingList');
-        if (!readingList || Array.isArray(readingList)) {
-          const obj = {};
-          if (Array.isArray(readingList)) readingList.forEach(r => { if(r && r.id) obj[r.id] = r; });
-          readingList = obj;
-        }
+        const readingList = await getReadingListMap();
         const item = readingList[msg.id];
         if (!item) { sendResponse({ ok: false, error: 'Not found' }); return; }
         delete readingList[msg.id];
