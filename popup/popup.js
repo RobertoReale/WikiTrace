@@ -20,7 +20,10 @@ function flash(msg, color = '#4ade80') {
 
 async function send(type, extra = {}) {
   return new Promise((resolve) =>
-    chrome.runtime.sendMessage({ type, ...extra }, resolve)
+    chrome.runtime.sendMessage({ type, ...extra }, (r) => {
+      void chrome.runtime.lastError;
+      resolve(r);
+    })
   );
 }
 
@@ -112,7 +115,7 @@ async function loadCurrentTab() {
   if (inReadingList) {
     btnSaveLater.disabled = true;
     btnSaveLater.textContent = '🔖 In reading list';
-  } else if (!saved) {
+  } else {
     btnSaveLater.disabled = false;
     btnSaveLater.onclick = () => showRLPicker(tab);
   }

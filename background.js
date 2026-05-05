@@ -583,6 +583,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const { domain, name } = msg;
         if (!domain) { sendResponse({ ok: false, error: 'No domain' }); return; }
         const normalDomain = domain.toLowerCase().replace(/^www\./, '').replace(/\/$/, '');
+        const domainRe = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+        if (!domainRe.test(normalDomain)) { sendResponse({ ok: false, error: 'invalid_domain' }); return; }
         if (sites.some((s) => s.domain === normalDomain)) {
           sendResponse({ ok: false, error: 'already_tracked' }); return;
         }

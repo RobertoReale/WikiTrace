@@ -6,7 +6,10 @@ const $ = (id) => document.getElementById(id);
 
 function send(type, extra = {}) {
   return new Promise((resolve) =>
-    chrome.runtime.sendMessage({ type, ...extra }, resolve)
+    chrome.runtime.sendMessage({ type, ...extra }, (r) => {
+      void chrome.runtime.lastError;
+      resolve(r);
+    })
   );
 }
 
@@ -520,7 +523,9 @@ $('btn-add-site').addEventListener('click', async () => {
     msgEl.style.color = 'var(--danger)';
     msgEl.textContent = resp?.error === 'already_tracked'
       ? 'This site is already being tracked.'
-      : 'Failed to add site. Check the domain format.';
+      : resp?.error === 'invalid_domain'
+        ? 'Invalid domain. Use a format like britannica.com'
+        : 'Failed to add site. Please try again.';
   }
 });
 
