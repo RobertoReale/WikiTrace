@@ -1060,14 +1060,24 @@ const graphView = (() => {
       degree[e.target]++;
     }
 
-    nodesData = pages.map((p) => ({
-      id: p.id, title: p.title, url: p.url,
-      category: p.userCategory || p.primaryCategory || 'Uncategorized',
-      timestamp: p.timestamp,
-      r: Math.min(20, Math.max(7, 5 + Math.sqrt(degree[p.id] || 0) * 1.5)),
-      x: cachedPos[p.id]?.x ?? W / 2 + (Math.random() - 0.5) * 200,
-      y: cachedPos[p.id]?.y ?? H / 2 + (Math.random() - 0.5) * 200,
-    }));
+    // Smart initial positioning: spawn nodes in a circle grouped by category
+    const uniqueCats = [...new Set(pages.map(p => p.userCategory || p.primaryCategory || 'Uncategorized'))];
+    const catAngles = {};
+    uniqueCats.forEach((c, i) => { catAngles[c] = (i / uniqueCats.length) * 2 * Math.PI; });
+    const spawnRadius = Math.min(W, H) * 0.35;
+
+    nodesData = pages.map((p) => {
+      const cat = p.userCategory || p.primaryCategory || 'Uncategorized';
+      const angle = catAngles[cat] || 0;
+      return {
+        id: p.id, title: p.title, url: p.url,
+        category: cat,
+        timestamp: p.timestamp,
+        r: Math.min(20, Math.max(7, 5 + Math.sqrt(degree[p.id] || 0) * 1.5)),
+        x: cachedPos[p.id]?.x ?? (W / 2 + Math.cos(angle) * spawnRadius + (Math.random() - 0.5) * 80),
+        y: cachedPos[p.id]?.y ?? (H / 2 + Math.sin(angle) * spawnRadius + (Math.random() - 0.5) * 80),
+      };
+    });
 
     const adjacent = new Set();
     for (const e of linksData) {
