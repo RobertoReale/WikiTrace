@@ -237,35 +237,53 @@ async function getReferrerId(tabId, fallbackParentId) {
 
 // ─── Page persistence ─────────────────────────────────────────────────────────
 
-async function savePage({ url, title, parentId }) {
+async function savePage({ url, title, parentId, userCategory = null }) {
   const normalUrl = normalizeUrl(url);
   const info = extractWikiInfo(url);
   if (!info) return null;
 
   const { pages = {} } = await storageGet('pages');
   const slug = extractSlug(normalUrl);
+  
+  // Cerchiamo se la pagina è già stata tracciata (es. dal sistema Automatic)
   const existing = Object.values(pages).find(
     (p) => p.url === normalUrl || (slug && extractSlug(p.url) === slug)
   );
-  if (existing) return existing.id;
 
+  if (existing) {
+    // FIX: Se la pagina esiste già e l'utente ha inserito una categoria, la aggiorniamo
+    if (userCategory) {
+      const { pages: current = {} } = await storageGet('pages');
+      if (current[existing.id]) {
+        current[existing.id].userCategory = userCategory; // Salviamo la tua categoria personalizzata
+        await storageSet({ pages: current });
+      }
+    }
+    return existing.id; // Ritorniamo l'ID esistente per non creare duplicati nel grafo
+  }
+
+  // Se la pagina è nuova, creiamo il record completo
   const id = generateId();
   const entry = {
-    id, url: normalUrl,
+    id, 
+    url: normalUrl,
     title: title || info.title,
     timestamp: Date.now(),
     parentId: parentId || null,
-    categories: [],
+    categories: [],           // Categorie automatiche di Wikipedia
     primaryCategory: null,
+    userCategory: userCategory, // La tua categoria (es. "Science")
     visitCount: 1,
   };
 
   pages[id] = entry;
   await storageSet({ pages });
 
+  // Gestione del grafo
   const { graphPositions = {} } = await storageGet('graphPositions');
   if (!graphPositions[id]) await storageSet({ graphCacheDirty: true });
 
+  // Continua a scaricare le categorie di Wikipedia in background per il grafo
   enqueueCategories(info.title, info.lang)
     .then(async (cats) => {
       const { pages: current = {} } = await storageGet('pages');

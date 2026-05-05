@@ -205,12 +205,29 @@ function showRLPicker(tab) {
 
   const confirm = async () => {
     const cat = $('rl-category-input').value.trim() || 'General';
-    const resp = await send('ADD_TO_READING_LIST', { url: tab.url, title: tab.title, userCategory: cat });
+    
+    // 1. Aggiunge alla lista di lettura (per leggere dopo)
+    const respRL = await send('ADD_TO_READING_LIST', { url: tab.url, title: tab.title, userCategory: cat });
+    
+    // 2. AGGIORNAMENTO FIX: Invia un comando anche per catalogare la pagina nel grafo
+    // Questo comando deve andare a colpire il record creato dall'automatico
+    await send('MANUAL_SAVE', { 
+      tabId: tab.id, 
+      url: tab.url, 
+      title: tab.title,
+      category: cat // Passiamo la categoria scelta
+    });
+
     picker.classList.add('hidden');
-    if (resp?.ok) {
-      flash(resp.alreadyExists ? 'Already in list' : 'Saved for later!');
+    
+    if (respRL?.ok) {
+      flash('Catalogato in ' + cat);
       $('btn-save-later').disabled = true;
       $('btn-save-later').textContent = '🔖 In reading list';
+      
+      // Ricarichiamo la info della tab per far sparire "Fetching categories..."
+      await loadCurrentTab(); 
+      await loadStats();
     } else {
       flash('Error saving', '#f87171');
       $('btn-save-later').disabled = false;
