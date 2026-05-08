@@ -11,6 +11,7 @@ Track, archive and visualise every Wikipedia page you visit — as a force-direc
 - **List view** — sortable by title / date / category, filterable by category and free-text search
 - **Batch URL import** — paste multiple Wikipedia URLs to add them at once
 - **Export / Import** — backup and restore your archive as JSON
+- **Cross-device sync** via GitHub Gist — push/pull your full archive between Chrome, Firefox and Firefox for Android
 
 ---
 
@@ -72,7 +73,36 @@ Switch mode from the popup at any time:
 
 ---
 
-## Roadmap (phase 2 — not yet implemented)
+## Cross-device sync (GitHub Gist)
 
-- Account + online archive for multi-device sync
-- Self-hosting option
+WikiTrace can sync your full archive across all devices — including Firefox and Firefox for Android — using a private GitHub Gist as a free, zero-server backend.
+
+### Setup
+
+1. Go to **github.com/settings/tokens** → **Generate new token (classic)**
+2. Tick only the **`gist`** scope → generate and copy the token
+3. Open the WikiTrace popup → click **Sync** → paste the token → **Connect**
+4. Click **Push →** to create the Gist on your first device
+
+### Syncing a second device
+
+1. Install WikiTrace on the new device
+2. Open the popup → **Sync** → paste the same token → **Connect**  
+   WikiTrace automatically finds your existing Gist
+3. Click **← Pull** to import your archive
+
+### Notes
+
+- The Gist is created **private** automatically
+- Merge strategy: union of all pages/entries, newer timestamp wins on conflict
+- Pages, reading list, tracked sites and custom-site data are all synced
+- The token is stored locally only and never included in the synced Gist
+
+---
+
+## Roadmap
+
+- [ ] Firefox add-on store release (cross-browser support)
+- [ ] Auto-sync on browser close / on a schedule
+- [ ] Selective sync (choose which categories or sites to include)
+- [ ] Self-hosting option (sync to your own server instead of GitHub Gist)

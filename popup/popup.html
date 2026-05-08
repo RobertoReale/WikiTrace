@@ -197,6 +197,60 @@
     .toggle input:checked + .toggle-track { background: var(--accent); }
     .toggle input:checked + .toggle-track::before { transform: translateX(14px); }
 
+    .sync-section { border-top: 1px solid var(--border); }
+    .sync-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; cursor: pointer;
+      font-size: 12px; color: var(--text2); user-select: none;
+    }
+    .sync-row:hover { background: var(--bg1); }
+    .sync-right { display: flex; align-items: center; gap: 5px; }
+    .sync-badge {
+      font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600;
+    }
+    .sync-badge-off { background: var(--bg1); color: var(--text3); }
+    .sync-badge-ok  { background: #14532d; color: #4ade80; }
+    .sync-badge-warn { background: #431407; color: #fb923c; }
+    [data-theme="light"] .sync-badge-ok  { background: #dcfce7; color: #16a34a; }
+    [data-theme="light"] .sync-badge-warn { background: #fff7ed; color: #c2410c; }
+    .sync-arrow { font-size: 12px; color: var(--text3); transition: transform .15s; display: inline-block; }
+    .sync-arrow.open { transform: rotate(90deg); }
+    .sync-panel { padding: 0 14px 12px; border-top: 1px solid var(--border); }
+    .sync-panel.hidden { display: none; }
+    .sync-token-wrap { display: flex; gap: 6px; margin-top: 10px; }
+    .sync-token-input {
+      flex: 1; padding: 5px 8px;
+      background: var(--bg1); border: 1px solid var(--border);
+      border-radius: 5px; color: var(--text); font-size: 11px; outline: none;
+    }
+    .sync-token-input:focus { border-color: var(--accent); }
+    .sync-connect-btn {
+      padding: 5px 10px; border: none; border-radius: 5px;
+      background: var(--accent); color: #fff;
+      font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    .sync-connect-btn:hover { background: var(--accent-hover); }
+    .sync-connect-btn:disabled { background: var(--bg1); color: var(--text3); cursor: default; }
+    .sync-info { margin-top: 8px; }
+    .sync-info.hidden { display: none; }
+    .sync-gist-row { font-size: 11px; color: var(--text3); margin-bottom: 7px; }
+    .sync-gist-id { font-family: monospace; color: var(--text2); cursor: pointer; }
+    .sync-gist-id:hover { color: var(--accent); }
+    .sync-action-btns { display: flex; gap: 6px; margin-top: 8px; }
+    .sync-action-btns.hidden { display: none; }
+    .sync-action-btn {
+      flex: 1; padding: 6px; border-radius: 5px;
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: background .1s, color .1s;
+    }
+    .sync-pull-btn {
+      border: 1px solid var(--border); background: none; color: var(--text2);
+    }
+    .sync-pull-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .sync-push-btn { border: none; background: var(--accent); color: #fff; }
+    .sync-push-btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .sync-action-btn:disabled { opacity: 0.4; cursor: default; }
+    .sync-feedback { margin-top: 6px; font-size: 11px; min-height: 16px; }
+
     .donate-footer {
       border-top: 1px solid var(--border);
       padding: 9px 14px;
@@ -272,6 +326,33 @@
   </div>
 
   <div id="status-msg"></div>
+
+  <div class="sync-section">
+    <div class="sync-row" id="sync-toggle">
+      <span>Sync</span>
+      <div class="sync-right">
+        <span class="sync-badge sync-badge-off" id="sync-badge">Off</span>
+        <span class="sync-arrow" id="sync-arrow">›</span>
+      </div>
+    </div>
+    <div class="sync-panel hidden" id="sync-panel">
+      <div class="sync-token-wrap">
+        <input type="password" id="sync-token-input" class="sync-token-input"
+               placeholder="GitHub token (gist scope)" autocomplete="off">
+        <button id="btn-sync-connect" class="sync-connect-btn">Connect</button>
+      </div>
+      <div class="sync-info hidden" id="sync-info">
+        <div class="sync-gist-row">
+          Gist: <span id="sync-gist-id" class="sync-gist-id" title="">—</span>
+        </div>
+      </div>
+      <div class="sync-action-btns hidden" id="sync-action-btns">
+        <button id="btn-sync-pull" class="sync-action-btn sync-pull-btn">← Pull</button>
+        <button id="btn-sync-push" class="sync-action-btn sync-push-btn">Push →</button>
+      </div>
+      <div id="sync-feedback" class="sync-feedback"></div>
+    </div>
+  </div>
 
   <div class="donate-footer">
     <a class="donate-link" href="https://paypal.me/RobertoReale12" target="_blank" rel="noopener noreferrer">

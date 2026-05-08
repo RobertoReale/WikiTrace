@@ -4,6 +4,13 @@
   "version": "1.2.0",
   "description": "Track, archive and visualise every Wikipedia page you visit.",
 
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "wikitrace@robertoreale.dev",
+      "strict_min_version": "128.0"
+    }
+  },
+
   "permissions": [
     "storage",
     "unlimitedStorage",

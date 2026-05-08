@@ -31,21 +31,22 @@ class StorageMutex {
 }
 const storageMutex = new StorageMutex();
 
+// Tab state kept in-memory (compatible with Firefox which lacks storage.session).
+// State is ephemeral by design: losing it on service-worker restart only means
+// the next page won't inherit a parent link, which is an acceptable trade-off.
+const tabStateMap = new Map();
+
 async function getTabState(tabId) {
   if (!tabId) return null;
-  const key = `tab_${tabId}`;
-  const res = await new Promise(resolve => chrome.storage.session.get(key, resolve));
-  return res[key] || null;
+  return tabStateMap.get(tabId) || null;
 }
 async function setTabState(tabId, state) {
   if (!tabId) return;
-  const key = `tab_${tabId}`;
-  await new Promise(resolve => chrome.storage.session.set({ [key]: state }, resolve));
+  tabStateMap.set(tabId, state);
 }
 async function deleteTabState(tabId) {
   if (!tabId) return;
-  const key = `tab_${tabId}`;
-  await new Promise(resolve => chrome.storage.session.remove(key, resolve));
+  tabStateMap.delete(tabId);
 }
 
 const apiQueue = [];
@@ -482,6 +483,60 @@ chrome.webNavigation.onCompleted.addListener(handleCustomNavCompleted, {
 
 chrome.tabs.onRemoved.addListener(async (tabId) => { await deleteTabState(tabId); });
 
+// ─── GitHub Gist Sync ────────────────────────────────────────────────────────
+
+const GIST_FILE = 'wikitrace-data.json';
+
+async function gistFetch(method, path, token, body) {
+  const r = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!r.ok) throw new Error(`GitHub ${r.status}`);
+  return r.json();
+}
+
+async function collectSyncPayload() {
+  const base = await storageGet(['pages', 'readingList', 'trackedSites']);
+  const sites = base.trackedSites || [];
+  const csites = {};
+  for (const s of sites) {
+    const d = await storageGet(`csite_${s.domain}`);
+    csites[s.domain] = d[`csite_${s.domain}`] || {};
+  }
+  return { pages: base.pages || {}, readingList: base.readingList || {}, trackedSites: sites, csites };
+}
+
+function mergePayloads(local, remote) {
+  const pages = { ...remote.pages };
+  for (const [id, p] of Object.entries(local.pages || {}))
+    if (!pages[id] || p.timestamp > pages[id].timestamp) pages[id] = p;
+
+  const readingList = { ...remote.readingList };
+  for (const [id, item] of Object.entries(local.readingList || {}))
+    if (!readingList[id] || item.savedAt > readingList[id].savedAt) readingList[id] = item;
+
+  const siteMap = {};
+  [...(remote.trackedSites || []), ...(local.trackedSites || [])].forEach(s => { siteMap[s.domain] = s; });
+
+  const csites = { ...(remote.csites || {}) };
+  for (const [domain, lp] of Object.entries(local.csites || {})) {
+    if (!csites[domain]) { csites[domain] = lp; continue; }
+    const m = { ...csites[domain] };
+    for (const [id, p] of Object.entries(lp))
+      if (!m[id] || p.timestamp > m[id].timestamp) m[id] = p;
+    csites[domain] = m;
+  }
+
+  return { pages, readingList, trackedSites: Object.values(siteMap), csites };
+}
+
 // ─── Message bus ──────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -809,6 +864,86 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         await storageSet({ pages: {}, graphPositions: {}, graphCacheDirty: true, readingList: {} });
         sendResponse({ ok: true });
+        break;
+      }
+
+      case 'SYNC_CONNECT': {
+        const { token } = msg;
+        if (!token) { sendResponse({ ok: false, error: 'no_token' }); return; }
+        try {
+          await gistFetch('GET', '/user', token);
+          const gists = await gistFetch('GET', '/gists?per_page=100', token);
+          const found = gists.find(g => GIST_FILE in g.files);
+          const { settings = {} } = await storageGet('settings');
+          const updated = { ...settings, syncToken: token };
+          if (found) updated.syncGistId = found.id;
+          await storageSet({ settings: updated });
+          sendResponse({ ok: true, gistId: found?.id || null });
+        } catch (e) {
+          sendResponse({ ok: false, error: e.message });
+        }
+        break;
+      }
+
+      case 'SYNC_PUSH': {
+        const { settings = {} } = await storageGet('settings');
+        const { syncToken: token, syncGistId: gistId } = settings;
+        if (!token) { sendResponse({ ok: false, error: 'no_token' }); return; }
+        try {
+          const payload = await collectSyncPayload();
+          const body = {
+            description: 'WikiTrace sync',
+            files: { [GIST_FILE]: { content: JSON.stringify(payload) } },
+          };
+          let newId = gistId;
+          if (gistId) {
+            await gistFetch('PATCH', `/gists/${gistId}`, token, body);
+          } else {
+            body.public = false;
+            const res = await gistFetch('POST', '/gists', token, body);
+            newId = res.id;
+          }
+          const now = Date.now();
+          await storageSet({ settings: { ...settings, syncGistId: newId, syncLastAt: now } });
+          sendResponse({ ok: true, gistId: newId, at: now });
+        } catch (e) {
+          sendResponse({ ok: false, error: e.message });
+        }
+        break;
+      }
+
+      case 'SYNC_PULL': {
+        const { settings = {} } = await storageGet('settings');
+        const { syncToken: token, syncGistId: gistId } = settings;
+        if (!token || !gistId) { sendResponse({ ok: false, error: 'not_configured' }); return; }
+        try {
+          const res = await gistFetch('GET', `/gists/${gistId}`, token);
+          const content = res.files?.[GIST_FILE]?.content;
+          if (!content) throw new Error('WikiTrace data not found in Gist');
+          const remote = JSON.parse(content);
+          const local = await collectSyncPayload();
+          const merged = mergePayloads(local, remote);
+          await storageSet({
+            pages: merged.pages,
+            readingList: merged.readingList,
+            trackedSites: merged.trackedSites,
+            graphCacheDirty: true,
+          });
+          for (const [domain, p] of Object.entries(merged.csites)) {
+            await storageSet({ [`csite_${domain}`]: p });
+          }
+          cachedTrackedSites = merged.trackedSites;
+          const now = Date.now();
+          await storageSet({ settings: { ...settings, syncLastAt: now } });
+          sendResponse({
+            ok: true,
+            pages: Object.keys(merged.pages).length,
+            rl: Object.keys(merged.readingList).length,
+            at: now,
+          });
+        } catch (e) {
+          sendResponse({ ok: false, error: e.message });
+        }
         break;
       }
 

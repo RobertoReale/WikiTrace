@@ -245,8 +245,134 @@ $('open-dashboard').addEventListener('click', () => {
   window.close();
 });
 
+// ── Sync ──────────────────────────────────────────────────────────────────────
+
+let syncSettings = {};
+
+function syncTimeAgo(ts) {
+  if (!ts) return 'never';
+  const d = Date.now() - ts;
+  if (d < 60000) return 'just now';
+  if (d < 3600000) return `${Math.floor(d / 60000)}m ago`;
+  if (d < 86400000) return `${Math.floor(d / 3600000)}h ago`;
+  return `${Math.floor(d / 86400000)}d ago`;
+}
+
+function renderSync() {
+  const { syncToken: token, syncGistId: gistId, syncLastAt: lastAt } = syncSettings;
+  const badge = $('sync-badge');
+
+  if (!token) {
+    badge.textContent = 'Off';
+    badge.className = 'sync-badge sync-badge-off';
+    $('sync-info').classList.add('hidden');
+    $('sync-action-btns').classList.add('hidden');
+    $('btn-sync-pull').disabled = true;
+    $('btn-sync-push').disabled = true;
+  } else if (!gistId) {
+    badge.textContent = 'Token saved';
+    badge.className = 'sync-badge sync-badge-warn';
+    $('sync-token-input').value = '•'.repeat(20);
+    $('sync-info').classList.add('hidden');
+    $('sync-action-btns').classList.remove('hidden');
+    $('btn-sync-pull').disabled = true;
+    $('btn-sync-push').disabled = false;
+  } else {
+    badge.textContent = syncTimeAgo(lastAt);
+    badge.className = 'sync-badge sync-badge-ok';
+    $('sync-token-input').value = '•'.repeat(20);
+    $('sync-info').classList.remove('hidden');
+    $('sync-action-btns').classList.remove('hidden');
+    const gistEl = $('sync-gist-id');
+    gistEl.textContent = gistId.slice(0, 10) + '…';
+    gistEl.title = gistId;
+    $('btn-sync-pull').disabled = false;
+    $('btn-sync-push').disabled = false;
+  }
+}
+
+function syncFlash(msg, ok = true) {
+  const el = $('sync-feedback');
+  el.style.color = ok ? 'var(--success)' : '#f87171';
+  el.textContent = msg;
+  if (msg) setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
+async function loadSyncStatus() {
+  const { settings = {} } = await send('GET_SETTINGS');
+  syncSettings = settings;
+  renderSync();
+}
+
+$('sync-toggle').addEventListener('click', () => {
+  const panel = $('sync-panel');
+  const arrow = $('sync-arrow');
+  const willOpen = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !willOpen);
+  arrow.classList.toggle('open', willOpen);
+});
+
+$('sync-gist-id').addEventListener('click', () => {
+  const id = syncSettings.syncGistId;
+  if (id) navigator.clipboard.writeText(id).then(() => syncFlash('Gist ID copied'));
+});
+
+$('btn-sync-connect').addEventListener('click', async () => {
+  const raw = $('sync-token-input').value.trim();
+  if (!raw || raw.startsWith('•')) { syncFlash('Enter your GitHub token', false); return; }
+  const btn = $('btn-sync-connect');
+  btn.disabled = true; btn.textContent = '…';
+  syncFlash('');
+  try {
+    const res = await send('SYNC_CONNECT', { token: raw });
+    if (!res.ok) throw new Error(res.error);
+    const { settings = {} } = await send('GET_SETTINGS');
+    syncSettings = settings;
+    renderSync();
+    syncFlash(res.gistId ? 'Connected — found existing sync' : 'Token saved — push to create sync');
+  } catch (e) {
+    syncFlash(e.message.includes('401') ? 'Invalid token' : e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Connect';
+  }
+});
+
+$('btn-sync-push').addEventListener('click', async () => {
+  const btn = $('btn-sync-push');
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const res = await send('SYNC_PUSH');
+    if (!res.ok) throw new Error(res.error);
+    syncSettings.syncGistId = res.gistId;
+    syncSettings.syncLastAt = res.at;
+    renderSync();
+    syncFlash('Pushed successfully');
+  } catch (e) {
+    syncFlash(e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Push →';
+  }
+});
+
+$('btn-sync-pull').addEventListener('click', async () => {
+  const btn = $('btn-sync-pull');
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const res = await send('SYNC_PULL');
+    if (!res.ok) throw new Error(res.error);
+    syncSettings.syncLastAt = res.at;
+    renderSync();
+    syncFlash(`Pulled — ${res.pages} pages, ${res.rl} in list`);
+    await loadStats();
+  } catch (e) {
+    syncFlash(e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = '← Pull';
+  }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 (async () => {
-  await Promise.all([loadStats(), loadCurrentTab(), loadSettings()]);
+  await Promise.all([loadStats(), loadCurrentTab(), loadSettings(), loadSyncStatus()]);
 })();
