@@ -2,16 +2,35 @@
 
 let reported = false;
 
+let scrollTimeout = null;
+
 function checkBottom() {
   if (reported) return;
-  if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 150) {
-    reported = true;
-    window.removeEventListener('scroll', checkBottom);
-    chrome.runtime.sendMessage({ type: 'PAGE_SCROLL_BOTTOM', url: location.href });
+  try {
+    const scrollY = window.scrollY;
+    const innerHeight = window.innerHeight;
+    const scrollHeight = document.documentElement.scrollHeight;
+    
+    if (scrollY + innerHeight >= scrollHeight - 150) {
+      reported = true;
+      window.removeEventListener('scroll', scheduleCheck);
+      chrome.runtime.sendMessage({ type: 'PAGE_SCROLL_BOTTOM', url: location.href });
+    }
+  } catch (e) {
+    // ignore
   }
 }
 
-window.addEventListener('scroll', checkBottom, { passive: true });
+function scheduleCheck() {
+  if (reported || scrollTimeout) return;
+  scrollTimeout = setTimeout(() => {
+    scrollTimeout = null;
+    checkBottom();
+  }, 200);
+}
+
+window.addEventListener('scroll', scheduleCheck, { passive: true });
+setTimeout(scheduleCheck, 1000);
 
 document.addEventListener('click', (e) => {
   const link = e.target.closest('a[href]');
