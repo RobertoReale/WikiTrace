@@ -200,6 +200,7 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
   color: var(--text3); font-size: 11px;
   padding: 4px 14px; border-radius: 20px;
   pointer-events: none; z-index: 5; white-space: nowrap;
+  transition: opacity 0.6s;
 }
 
 #graph-empty {

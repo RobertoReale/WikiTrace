@@ -962,6 +962,7 @@ const graphView = (() => {
   let built = false;
   let simulation = null;
   let svgRoot = null;
+  let noticeTimeout = null;
   let gMain = null;
   let nodesData = [];
   let linksData = [];
@@ -1055,12 +1056,19 @@ const graphView = (() => {
     const MAX_NODES = 100;
     const notice = $('graph-notice');
     let pages = inputPages;
+    clearTimeout(noticeTimeout);
     if (inputPages.length > MAX_NODES) {
       pages = [...inputPages].sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_NODES);
       notice.textContent = `Showing ${MAX_NODES} of ${inputPages.length} pages (most recent). Use category filters to narrow down.`;
+      notice.style.opacity = '1';
       notice.classList.remove('hidden');
+      noticeTimeout = setTimeout(() => {
+        notice.style.opacity = '0';
+        setTimeout(() => notice.classList.add('hidden'), 600);
+      }, 4000);
     } else {
       notice.classList.add('hidden');
+      notice.style.opacity = '1';
     }
 
     const W = $('graph-svg').clientWidth || 900;
