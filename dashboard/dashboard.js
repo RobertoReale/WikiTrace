@@ -265,63 +265,49 @@ function renderRLActiveFiltersBar() {
   container.innerHTML = '';
   container.classList.remove('hidden');
 
-  if (hasSearch) {
+  function mkTag(labelText, valueText, closeTitle, onClose) {
     const tag = document.createElement('div');
     tag.className = 'filter-tag';
-    tag.innerHTML = `<span class="filter-tag-label">Search:</span> "${escHtml(rlSearchQuery)}" 
-                     <button class="filter-tag-close" title="Clear search">&times;</button>`;
-    tag.querySelector('.filter-tag-close').onclick = () => {
-      rlSearchQuery = '';
-      $('rl-search-input').value = '';
-      renderReadingList();
-    };
-    container.appendChild(tag);
+    const lbl = document.createElement('span');
+    lbl.className = 'filter-tag-label';
+    lbl.textContent = labelText;
+    const btn = document.createElement('button');
+    btn.className = 'filter-tag-close';
+    btn.title = closeTitle;
+    btn.textContent = '×';
+    btn.onclick = onClose;
+    tag.append(lbl, ` ${valueText} `, btn);
+    return tag;
   }
 
-  if (hasCat) {
-    const tag = document.createElement('div');
-    tag.className = 'filter-tag';
-    tag.innerHTML = `<span class="filter-tag-label">Category:</span> ${escHtml(rlActiveCategory)} 
-                     <button class="filter-tag-close" title="Clear category">&times;</button>`;
-    tag.querySelector('.filter-tag-close').onclick = () => {
-      rlActiveCategory = null;
-      renderRLCategoryFilter();
-      renderReadingList();
-    };
-    container.appendChild(tag);
-  }
+  if (hasSearch)
+    container.appendChild(mkTag('Search:', `"${rlSearchQuery}"`, 'Clear search', () => {
+      rlSearchQuery = ''; $('rl-search-input').value = ''; renderReadingList();
+    }));
 
-  if (hasDomain) {
-    const tag = document.createElement('div');
-    tag.className = 'filter-tag';
-    tag.innerHTML = `<span class="filter-tag-label">Site:</span> ${escHtml(rlActiveDomain)} 
-                     <button class="filter-tag-close" title="Clear site">&times;</button>`;
-    tag.querySelector('.filter-tag-close').onclick = () => {
-      rlActiveDomain = null;
-      renderRLDomainFilter();
-      renderReadingList();
-    };
-    container.appendChild(tag);
-  }
+  if (hasCat)
+    container.appendChild(mkTag('Category:', rlActiveCategory, 'Clear category', () => {
+      rlActiveCategory = null; renderRLCategoryFilter(); renderReadingList();
+    }));
+
+  if (hasDomain)
+    container.appendChild(mkTag('Site:', rlActiveDomain, 'Clear site', () => {
+      rlActiveDomain = null; renderRLDomainFilter(); renderReadingList();
+    }));
 
   if (hasSort) {
     let sortName = '';
-    switch(rlSortKey) {
+    switch (rlSortKey) {
       case 'date-asc': sortName = 'Date ↑'; break;
       case 'title': sortName = 'Title A-Z'; break;
       case 'domain': sortName = 'Domain'; break;
       case 'category': sortName = 'Category'; break;
     }
-    const tag = document.createElement('div');
-    tag.className = 'filter-tag';
-    tag.innerHTML = `<span class="filter-tag-label">Sort:</span> ${sortName} 
-                     <button class="filter-tag-close" title="Reset sort">&times;</button>`;
-    tag.querySelector('.filter-tag-close').onclick = () => {
+    container.appendChild(mkTag('Sort:', sortName, 'Reset sort', () => {
       rlSortKey = 'date-desc';
       document.querySelectorAll('.rl-sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === 'date-desc'));
       renderReadingList();
-    };
-    container.appendChild(tag);
+    }));
   }
 
   const clearBtn = document.createElement('button');
@@ -364,61 +350,72 @@ function renderReadingList() {
   });
 
   if (items.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <p>${allReadingList.length === 0 ? 'Your reading list is empty.' : 'No results match your filter.'}</p>
-        <small>${allReadingList.length === 0 ? 'Use "Save for later" in the popup to add pages.' : 'Try adjusting your search or category filter.'}</small>
-      </div>`;
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    const p = document.createElement('p');
+    p.textContent = allReadingList.length === 0 ? 'Your reading list is empty.' : 'No results match your filter.';
+    const small = document.createElement('small');
+    small.textContent = allReadingList.length === 0 ? 'Use "Save for later" in the popup to add pages.' : 'Try adjusting your search or category filter.';
+    empty.append(p, small);
+    container.replaceChildren(empty);
     return;
   }
 
-  const rows = items.map((r) => {
+  const table = document.createElement('table');
+  const thead = table.createTHead();
+  const hrow = thead.insertRow();
+  for (const th of ['Title', 'Saved', 'Domain', 'Category', '']) {
+    const cell = document.createElement('th');
+    cell.textContent = th;
+    hrow.appendChild(cell);
+  }
+  const tbody = table.createTBody();
+
+  for (const r of items) {
     const cat = r.userCategory || 'General';
     const color = catColor(cat);
     const bg = color.replace('hsl(', 'hsla(').replace(')', ',0.15)');
     const dom = getDomain(r.url);
-    return `
-      <tr data-rl-id="${r.id}">
-        <td class="col-title"><a href="${escHtml(r.url)}" target="_blank">${escHtml(r.title)}</a></td>
-        <td class="col-date">${formatDate(r.savedAt)}</td>
-        <td class="col-domain"><span style="font-size:11px;color:var(--text3);">${escHtml(dom)}</span></td>
-        <td class="col-cat"><span class="cat-pill" style="color:${color};background:${bg}">${escHtml(cat)}</span></td>
-        <td class="col-actions">
-          <button class="rl-mark-read" data-rl-read="${r.id}" title="Mark as read">✓ Read</button>
-          <button class="rl-remove" data-rl-del="${r.id}" title="Remove">&times;</button>
-        </td>
-      </tr>`;
-  }).join('');
+    const tr = tbody.insertRow();
+    tr.dataset.rlId = r.id;
 
-  container.innerHTML = `
-    <table>
-      <thead><tr>
-        <th>Title</th><th>Saved</th><th>Domain</th><th>Category</th><th></th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    const tdTitle = tr.insertCell(); tdTitle.className = 'col-title';
+    const a = document.createElement('a'); a.href = r.url; a.target = '_blank'; a.textContent = r.title;
+    tdTitle.appendChild(a);
 
-  container.querySelectorAll('[data-rl-read]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.rlRead;
-      await send('MARK_AS_READ', { id });
-      allReadingList = allReadingList.filter((r) => r.id !== id);
-      await loadPages();
-      renderStats();
-      renderReadingList();
+    const tdDate = tr.insertCell(); tdDate.className = 'col-date';
+    tdDate.textContent = formatDate(r.savedAt);
+
+    const tdDom = tr.insertCell(); tdDom.className = 'col-domain';
+    const domSpan = document.createElement('span');
+    domSpan.style.cssText = 'font-size:11px;color:var(--text3);';
+    domSpan.textContent = dom;
+    tdDom.appendChild(domSpan);
+
+    const tdCat = tr.insertCell(); tdCat.className = 'col-cat';
+    const pill = document.createElement('span'); pill.className = 'cat-pill';
+    pill.style.color = color; pill.style.background = bg; pill.textContent = cat;
+    tdCat.appendChild(pill);
+
+    const tdAct = tr.insertCell(); tdAct.className = 'col-actions';
+    const readBtn = document.createElement('button');
+    readBtn.className = 'rl-mark-read'; readBtn.title = 'Mark as read'; readBtn.textContent = '✓ Read';
+    readBtn.addEventListener('click', async () => {
+      await send('MARK_AS_READ', { id: r.id });
+      allReadingList = allReadingList.filter((x) => x.id !== r.id);
+      await loadPages(); renderStats(); renderReadingList();
     });
-  });
-
-  container.querySelectorAll('[data-rl-del]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.rlDel;
-      await send('REMOVE_FROM_READING_LIST', { id });
-      allReadingList = allReadingList.filter((r) => r.id !== id);
-      renderRLCategoryFilter();
-      renderRLDomainFilter();
-      renderReadingList();
+    const delBtn = document.createElement('button');
+    delBtn.className = 'rl-remove'; delBtn.title = 'Remove'; delBtn.textContent = '×';
+    delBtn.addEventListener('click', async () => {
+      await send('REMOVE_FROM_READING_LIST', { id: r.id });
+      allReadingList = allReadingList.filter((x) => x.id !== r.id);
+      renderRLCategoryFilter(); renderRLDomainFilter(); renderReadingList();
     });
-  });
+    tdAct.append(readBtn, delBtn);
+  }
+
+  container.replaceChildren(table);
 }
 
 function renderRLStats() {
@@ -467,51 +464,65 @@ function renderList() {
   const pages = filteredPages();
 
   if (pages.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <p>${allPages.length === 0 ? 'No pages saved yet.' : 'No results match your filter.'}</p>
-        <small>${allPages.length === 0 ? 'Browse some pages — they appear here automatically.' : 'Try adjusting your search or category filters.'}</small>
-      </div>`;
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    const p = document.createElement('p');
+    p.textContent = allPages.length === 0 ? 'No pages saved yet.' : 'No results match your filter.';
+    const small = document.createElement('small');
+    small.textContent = allPages.length === 0 ? 'Browse some pages — they appear here automatically.' : 'Try adjusting your search or category filters.';
+    empty.append(p, small);
+    container.replaceChildren(empty);
     return;
   }
 
-  const rows = pages.map((p) => {
+  const table = document.createElement('table');
+  const thead = table.createTHead();
+  const hrow = thead.insertRow();
+  for (const th of ['Title', 'Date added', 'Category', '']) {
+    const cell = document.createElement('th');
+    cell.textContent = th;
+    hrow.appendChild(cell);
+  }
+  const tbody = table.createTBody();
+
+  for (const p of pages) {
     const cat = p.userCategory || p.primaryCategory || 'Uncategorized';
     const color = catColor(cat);
     const bg = color.replace('hsl(', 'hsla(').replace(')', ',0.15)');
-    return `
-      <tr data-id="${p.id}">
-        <td class="col-title"><a href="${escHtml(p.url)}" target="_blank">${escHtml(p.title)}</a></td>
-        <td class="col-date">${formatDate(p.timestamp)}</td>
-        <td class="col-cat"><span class="cat-pill" style="color:${color};background:${bg}">${escHtml(cat)}</span></td>
-        <td class="col-del"><button title="Remove" data-del="${p.id}">&times;</button></td>
-      </tr>`;
-  }).join('');
+    const tr = tbody.insertRow();
+    tr.dataset.id = p.id;
 
-  container.innerHTML = `
-    <table>
-      <thead><tr>
-        <th>Title</th><th>Date added</th><th>Category</th><th></th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    const tdTitle = tr.insertCell(); tdTitle.className = 'col-title';
+    const a = document.createElement('a'); a.href = p.url; a.target = '_blank'; a.textContent = p.title;
+    tdTitle.appendChild(a);
 
-  container.querySelectorAll('[data-del]').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
+    const tdDate = tr.insertCell(); tdDate.className = 'col-date';
+    tdDate.textContent = formatDate(p.timestamp);
+
+    const tdCat = tr.insertCell(); tdCat.className = 'col-cat';
+    const pill = document.createElement('span'); pill.className = 'cat-pill';
+    pill.style.color = color; pill.style.background = bg; pill.textContent = cat;
+    tdCat.appendChild(pill);
+
+    const tdDel = tr.insertCell(); tdDel.className = 'col-del';
+    const delBtn = document.createElement('button');
+    delBtn.title = 'Remove'; delBtn.textContent = '×';
+    delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const id = btn.dataset.del;
+      const id = p.id;
       if (currentSite === 'wikipedia') {
         await send('DELETE_PAGE', { id });
       } else {
         await send('DELETE_CSITE_PAGE', { domain: currentSite, id });
       }
-      allPages = allPages.filter((p) => p.id !== id);
-      renderStats();
-      renderCategoryFilter();
-      renderList();
+      allPages = allPages.filter((page) => page.id !== id);
+      renderStats(); renderCategoryFilter(); renderList();
       if (graphView.built) graphView.rebuild(allPages);
     });
-  });
+    tdDel.appendChild(delBtn);
+  }
+
+  container.replaceChildren(table);
 }
 
 function escHtml(str) {
@@ -634,29 +645,50 @@ function buildSiteCard(site, isBuiltin, pageCount) {
   const count = pageCount ?? '…';
   const card = document.createElement('div');
   card.className = 'site-card';
-  card.innerHTML = `
-    <div class="site-card-info">
-      <div class="site-card-domain">
-        ${escHtml(site.domain)}
-        ${isBuiltin ? '<span class="site-card-builtin">built-in</span>' : ''}
-      </div>
-      <div class="site-card-name">${escHtml(site.name || site.domain)}</div>
-      <div class="site-card-stats">${count} page${count !== 1 ? 's' : ''} saved</div>
-    </div>
-    <div class="site-card-actions">
-      <button class="btn-goto-site" title="View this site's pages">View →</button>
-      ${!isBuiltin ? `<button class="btn-danger-text" title="Remove site and delete all data">Remove</button>` : ''}
-    </div>`;
 
-  card.querySelector('.btn-goto-site').addEventListener('click', () => {
+  const info = document.createElement('div');
+  info.className = 'site-card-info';
+
+  const domainDiv = document.createElement('div');
+  domainDiv.className = 'site-card-domain';
+  domainDiv.textContent = site.domain;
+  if (isBuiltin) {
+    const builtinSpan = document.createElement('span');
+    builtinSpan.className = 'site-card-builtin';
+    builtinSpan.textContent = 'built-in';
+    domainDiv.append(' ', builtinSpan);
+  }
+
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'site-card-name';
+  nameDiv.textContent = site.name || site.domain;
+
+  const statsDiv = document.createElement('div');
+  statsDiv.className = 'site-card-stats';
+  statsDiv.textContent = `${count} page${count !== 1 ? 's' : ''} saved`;
+
+  info.append(domainDiv, nameDiv, statsDiv);
+
+  const actions = document.createElement('div');
+  actions.className = 'site-card-actions';
+
+  const viewBtn = document.createElement('button');
+  viewBtn.className = 'btn-goto-site';
+  viewBtn.title = "View this site's pages";
+  viewBtn.textContent = 'View →';
+  viewBtn.addEventListener('click', () => {
     const val = isBuiltin ? 'wikipedia' : site.domain;
     $('site-selector').value = val;
     $('site-selector').dispatchEvent(new Event('change'));
     document.querySelector('.tab[data-tab="list"]').click();
   });
+  actions.appendChild(viewBtn);
 
-  const removeBtn = card.querySelector('.btn-danger-text');
-  if (removeBtn) {
+  if (!isBuiltin) {
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn-danger-text';
+    removeBtn.title = 'Remove site and delete all data';
+    removeBtn.textContent = 'Remove';
     removeBtn.addEventListener('click', async () => {
       if (!confirm(`Remove ${site.domain}? All saved pages will be deleted.`)) return;
       await send('REMOVE_TRACKED_SITE', { domain: site.domain });
@@ -674,8 +706,10 @@ function buildSiteCard(site, isBuiltin, pageCount) {
       updateSiteSelector();
       renderSitesPanel();
     });
+    actions.appendChild(removeBtn);
   }
 
+  card.append(info, actions);
   return card;
 }
 
