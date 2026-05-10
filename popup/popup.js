@@ -7,10 +7,6 @@ function isWikiUrl(url) {
   catch { return false; }
 }
 
-function escHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
 function flash(msg, color = '#4ade80') {
   const el = $('status-msg');
   el.style.color = color;

@@ -165,24 +165,7 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
 .empty-state small { font-size: 12px; }
 
 .graph-view { flex: 1; position: relative; overflow: hidden; }
-#graph-svg { width: 100%; height: 100%; display: block; }
-
-.node circle { stroke-width: 1.5px; cursor: pointer; transition: r .15s, opacity .2s, stroke-width .2s; }
-.node circle:hover { r: 12 !important; stroke-width: 2px; }
-.node text {
-  pointer-events: none; font-size: 10px; fill: var(--text);
-  text-shadow: 0 0 3px var(--bg0), 0 0 3px var(--bg0);
-  transition: opacity .2s;
-}
-.link { stroke: var(--text2); stroke-opacity: 0.4; fill: none; transition: stroke-opacity .2s, stroke-width .2s; }
-.link.nav  { stroke-dasharray: none; }
-.link.chrono { stroke-dasharray: 4 3; }
-.hull { pointer-events: none; }
-.cluster-label {
-  pointer-events: none; font-size: 10px; font-weight: 600;
-  letter-spacing: .05em; text-transform: uppercase; fill-opacity: .4;
-  transition: fill-opacity .2s;
-}
+#graph-canvas { width: 100%; height: 100%; display: block; cursor: default; }
 
 .graph-legend {
   position: absolute; bottom: 16px; right: 16px;
@@ -194,14 +177,6 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
 .legend-line { width: 20px; height: 2px; background: var(--text2); }
 .legend-dashed { background: none; border-bottom: 2px dashed var(--text2); }
 
-.graph-notice {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-  background: var(--bg1); border: 1px solid var(--border);
-  color: var(--text3); font-size: 11px;
-  padding: 4px 14px; border-radius: 20px;
-  pointer-events: none; z-index: 5; white-space: nowrap;
-  transition: opacity 0.6s;
-}
 .graph-slider-bar {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   background: var(--bg1); border: 1px solid var(--border);
