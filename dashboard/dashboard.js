@@ -755,7 +755,18 @@ $('btn-add-urls').addEventListener('click', async () => {
 
   const entries = raw.split('\n')
     .map((l) => l.trim())
-    .filter((l) => l.includes('wikipedia.org/wiki/'))
+    .map((l) => {
+      if (l.includes('wikipedia.org/w/index.php')) {
+        try {
+          const u = new URL(l);
+          const title = u.searchParams.get('title');
+          if (title) return `${u.origin}/wiki/${title.replace(/ /g, '_')}`;
+        } catch {}
+        return null;
+      }
+      return l;
+    })
+    .filter((l) => l && l.includes('wikipedia.org/wiki/'))
     .map((url) => ({ url }));
 
   if (entries.length === 0) {
