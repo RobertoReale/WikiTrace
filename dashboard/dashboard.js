@@ -937,6 +937,7 @@ const graphView = (() => {
   let animFrameId     = null;
   let needsDraw       = false;
   let abortController = null;
+  let linkFilter      = 'both';
 
   // ── Data helpers ──────────────────────────────────────────────────────────────
 
@@ -1084,6 +1085,7 @@ const graphView = (() => {
   function _drawLinks() {
     const edgeColor = cssVar('--text2');
     for (const l of linksData) {
+      if (linkFilter !== 'both' && l.type !== linkFilter) continue;
       // Skip links not yet resolved by the force simulation
       if (!l.source || !l.target || l.source.x == null) continue;
       let opacity = 0.4, sw = 1.2;
@@ -1329,6 +1331,7 @@ const graphView = (() => {
 
     // ── Mouse handlers — registered BEFORE zoom so stopImmediatePropagation ──────
     // prevents D3 zoom from capturing mousedown on a node.
+    let wasDragging = false;
     const mousedown = (e) => {
       if (e.button !== 0) return;
       const [mx, my] = d3.pointer(e);
@@ -1373,6 +1376,7 @@ const graphView = (() => {
 
     const mouseup = () => {
       if (dragNode) {
+        if (isDragging) wasDragging = true;
         dragNode.fx = null; dragNode.fy = null;
         simulation.alphaTarget(0);
         dragNode = null; isDragging = false;
@@ -1381,7 +1385,7 @@ const graphView = (() => {
     };
 
     const click = (e) => {
-      if (isDragging) return;
+      if (wasDragging) { wasDragging = false; return; }
       const [mx, my] = d3.pointer(e);
       const [gx, gy] = currentTransform.invert([mx, my]);
       const node = findNodeAt(gx, gy);
@@ -1457,6 +1461,7 @@ const graphView = (() => {
     init(pages)    { if (!built) build(pages); },
     rebuild(pages) { built = false; if (simulation) simulation.stop(); build(pages); },
     applyFilter,
+    setLinkFilter(f) { linkFilter = f; if (built) requestDraw(); },
     redraw()       { if (built) requestDraw(); },
     setPosKey(key) { posKey = key; },
     clear() {
@@ -1471,6 +1476,15 @@ const graphView = (() => {
     },
   };
 })();
+
+// ─── Link filter buttons ──────────────────────────────────────────────────────
+
+document.querySelectorAll('.link-filter-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.link-filter-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    graphView.setLinkFilter(btn.dataset.filter);
+  });
+});
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 

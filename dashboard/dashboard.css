@@ -193,6 +193,24 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
 #graph-slider-val { color: var(--text); font-weight: 600; min-width: 28px; text-align: right; }
 .graph-slider-sep { color: var(--text3); }
 
+.graph-link-filter-bar {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  background: var(--bg1); border: 1px solid var(--border);
+  border-radius: 20px; padding: 4px 12px;
+  display: flex; align-items: center; gap: 8px;
+  z-index: 5; pointer-events: auto;
+  font-size: 11px; white-space: nowrap;
+}
+.link-filter-group { display: flex; gap: 2px; }
+.link-filter-btn {
+  background: none; border: 1px solid transparent;
+  color: var(--text3); font-size: 11px;
+  padding: 2px 10px; border-radius: 12px;
+  cursor: pointer; transition: background .12s, color .12s;
+}
+.link-filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.link-filter-btn:hover:not(.active) { background: var(--bg2); color: var(--text); }
+
 #graph-empty {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
