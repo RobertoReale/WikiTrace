@@ -99,7 +99,13 @@
           <button id="btn-zoom-reset" title="Reset Zoom">⟲</button>
           <button id="btn-reset-layout" title="Reset Graph Layout">🔀</button>
         </div>
-        <div id="graph-notice" class="graph-notice hidden"></div>
+        <div id="graph-slider-bar" class="graph-slider-bar hidden">
+          <span class="graph-slider-label">Pages:</span>
+          <input type="range" id="graph-node-slider" class="graph-slider" min="10" max="100" value="100" step="1">
+          <span id="graph-slider-val">100</span>
+          <span id="graph-slider-total" class="graph-slider-sep">/ 100</span>
+        </div>
+        <div id="graph-notice" class="graph-notice hidden"><span id="graph-notice-text"></span></div>
         <div id="graph-empty" class="hidden">
           <p>No pages to display.</p>
           <small>Browse some Wikipedia pages to get started.</small>

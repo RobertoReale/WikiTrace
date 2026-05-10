@@ -769,6 +769,8 @@ $('btn-add-urls').addEventListener('click', async () => {
   }
 
   $('btn-add-urls').disabled = true;
+  $('add-msg').style.color = 'var(--text2)';
+  $('add-msg').textContent = `Processing ${entries.length} URL(s)…`;
   const resp = await send('ADD_URLS', { entries });
   $('btn-add-urls').disabled = false;
 
@@ -776,7 +778,7 @@ $('btn-add-urls').addEventListener('click', async () => {
     $('add-urls-input').value = '';
     $('add-msg').style.color = 'var(--success)';
     $('add-msg').textContent = `Added ${resp.added} new page(s).`;
-    setTimeout(() => { $('add-msg').textContent = ''; }, 3000);
+    setTimeout(() => { $('add-msg').textContent = ''; }, 4000);
     await loadPages();
     renderStats();
     renderCategoryFilter();
@@ -968,6 +970,9 @@ const graphView = (() => {
   let linksData = [];
   let activeFilter = null;
   let posKey = 'wt-positions';
+  let nodeLimit = 100;
+  let lastInputPages = [];
+  let sliderDebounce = null;
 
   function buildEdges(pages) {
     const byId = new Map(pages.map((p) => [p.id, p]));
@@ -1053,23 +1058,30 @@ const graphView = (() => {
     if (inputPages.length === 0) { $('graph-empty').classList.remove('hidden'); return; }
     $('graph-empty').classList.add('hidden');
 
-    const MAX_NODES = 100;
-    const notice = $('graph-notice');
-    let pages = inputPages;
+    const MIN_SLIDER = 10;
+    const sliderBar = $('graph-slider-bar');
+    const slider = $('graph-node-slider');
+    const sliderValEl = $('graph-slider-val');
+    const sliderTotalEl = $('graph-slider-total');
     clearTimeout(noticeTimeout);
-    if (inputPages.length > MAX_NODES) {
-      pages = [...inputPages].sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_NODES);
-      notice.textContent = `Showing ${MAX_NODES} of ${inputPages.length} pages (most recent). Use category filters to narrow down.`;
-      notice.style.opacity = '1';
-      notice.classList.remove('hidden');
-      noticeTimeout = setTimeout(() => {
-        notice.style.opacity = '0';
-        setTimeout(() => notice.classList.add('hidden'), 600);
-      }, 4000);
+    $('graph-notice').classList.add('hidden');
+    lastInputPages = inputPages;
+
+    if (inputPages.length > MIN_SLIDER) {
+      nodeLimit = Math.min(Math.max(nodeLimit, MIN_SLIDER), inputPages.length);
+      slider.min = MIN_SLIDER;
+      slider.max = inputPages.length;
+      slider.value = nodeLimit;
+      sliderValEl.textContent = nodeLimit;
+      sliderTotalEl.textContent = `/ ${inputPages.length}`;
+      sliderBar.classList.remove('hidden');
     } else {
-      notice.classList.add('hidden');
-      notice.style.opacity = '1';
+      sliderBar.classList.add('hidden');
     }
+
+    let pages = (nodeLimit < inputPages.length)
+      ? [...inputPages].sort((a, b) => b.timestamp - a.timestamp).slice(0, nodeLimit)
+      : inputPages;
 
     const W = $('graph-svg').clientWidth || 900;
     const H = $('graph-svg').clientHeight || 600;
@@ -1355,6 +1367,17 @@ const graphView = (() => {
     const categories = [...new Set(nodesData.map((n) => n.category))];
     updateHulls(categories, gMain.select('.hulls'), gMain.select('.cluster-labels'));
   }
+
+  $('graph-node-slider').addEventListener('input', (e) => {
+    nodeLimit = +e.target.value;
+    $('graph-slider-val').textContent = nodeLimit;
+    clearTimeout(sliderDebounce);
+    sliderDebounce = setTimeout(() => {
+      built = false;
+      if (simulation) simulation.stop();
+      build(lastInputPages);
+    }, 300);
+  });
 
   return {
     get built() { return built; },

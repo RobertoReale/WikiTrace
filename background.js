@@ -593,17 +593,42 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'ADD_URLS': {
-        const { pages: existingPages = {} } = await storageGet('pages');
-        const existingUrls = new Set(Object.values(existingPages).map((p) => p.url));
-        const results = [];
-        let added = 0;
-        for (const entry of msg.entries) {
-          const normalUrl = normalizeUrl(entry.url);
-          const id = await savePage({ url: entry.url, title: entry.title || null, parentId: null });
-          results.push({ url: entry.url, id });
-          if (id && !existingUrls.has(normalUrl)) { added++; existingUrls.add(normalUrl); }
-        }
-        sendResponse({ ok: true, results, added });
+        await storageMutex.run(async () => {
+          const { pages = {} } = await storageGet('pages');
+          const existingUrls = new Set(Object.values(pages).map((p) => p.url));
+          const existingSlugs = new Set(Object.values(pages).map((p) => extractSlug(p.url)).filter(Boolean));
+          let added = 0;
+          for (const entry of msg.entries) {
+            const info = extractWikiInfo(entry.url);
+            if (!info) continue;
+            const normalUrl = normalizeUrl(entry.url);
+            const slug = extractSlug(normalUrl);
+            if (existingUrls.has(normalUrl) || (slug && existingSlugs.has(slug))) continue;
+            const id = generateId();
+            pages[id] = {
+              id, url: normalUrl, title: entry.title || info.title,
+              timestamp: Date.now(), parentId: null,
+              categories: [], primaryCategory: null,
+              userCategory: null, visitCount: 1,
+            };
+            existingUrls.add(normalUrl);
+            if (slug) existingSlugs.add(slug);
+            added++;
+            enqueueCategories(info.title, info.lang)
+              .then(async (cats) => {
+                await storageMutex.run(async () => {
+                  const { pages: cur = {} } = await storageGet('pages');
+                  if (!cur[id]) return;
+                  cur[id].categories = cats;
+                  cur[id].primaryCategory = cats[0] || null;
+                  await storageSet({ pages: cur });
+                });
+              })
+              .catch((e) => console.warn('WikiTrace: category fetch failed', e));
+          }
+          await storageSet({ pages, graphCacheDirty: true });
+          sendResponse({ ok: true, added });
+        });
         break;
       }
 

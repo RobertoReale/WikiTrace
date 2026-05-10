@@ -202,6 +202,21 @@ tbody td { padding: 9px 14px; vertical-align: middle; }
   pointer-events: none; z-index: 5; white-space: nowrap;
   transition: opacity 0.6s;
 }
+.graph-slider-bar {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  background: var(--bg1); border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 16px;
+  display: flex; align-items: center; gap: 8px;
+  z-index: 5; pointer-events: auto;
+  font-size: 11px; color: var(--text2); white-space: nowrap;
+}
+.graph-slider-label { color: var(--text3); }
+.graph-slider {
+  width: 120px; accent-color: var(--accent); cursor: pointer;
+  height: 4px; border-radius: 2px;
+}
+#graph-slider-val { color: var(--text); font-weight: 600; min-width: 28px; text-align: right; }
+.graph-slider-sep { color: var(--text3); }
 
 #graph-empty {
   position: absolute; inset: 0;
