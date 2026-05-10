@@ -186,6 +186,41 @@ async function processNext() {
 
 // ─── URL utilities ────────────────────────────────────────────────────────────
 
+// Known Wikipedia namespace prefixes (lowercase, underscore form as they appear
+// in URLs). Articles whose slug starts with one of these followed by ':' are
+// meta/administrative pages and are not saved as graph nodes.
+const WIKI_NS_PREFIXES = new Set([
+  // Universal / English
+  'special','talk','user','user_talk','wikipedia','wikipedia_talk',
+  'file','file_talk','image','image_talk','mediawiki','mediawiki_talk',
+  'template','template_talk','help','help_talk','category','category_talk',
+  'portal','portal_talk','book','book_talk','draft','draft_talk',
+  'module','module_talk','timedtext','timedtext_talk',
+  // Italian
+  'speciale','discussione','utente','utente_discussione','wikipedia_discussione',
+  'file_discussione','mediawiki_discussione','template_discussione',
+  'aiuto','aiuto_discussione','categoria','discussioni_categoria',
+  'portale','portale_discussione','progetto','progetto_discussione',
+  'modulo','modulo_discussione',
+  // German
+  'spezial','diskussion','benutzer','benutzer_diskussion','datei','datei_diskussion',
+  'bild','vorlage','vorlage_diskussion','hilfe','hilfe_diskussion',
+  'kategorie','kategorie_diskussion',
+  // French
+  'spécial','discussion','utilisateur','utilisateur_discussion',
+  'fichier','fichier_discussion','modèle','modèle_discussion',
+  'aide','aide_discussion','catégorie','catégorie_discussion',
+  'portail','portail_discussion',
+  // Spanish
+  'especial','discusión','usuario','usuario_discusión','archivo','archivo_discusión',
+  'plantilla','plantilla_discusión','ayuda','ayuda_discusión',
+  'categoría','categoría_discusión',
+  // Portuguese
+  'especial','discussão','utilizador','utilizador_discussão','usuário','usuário_discussão',
+  'ficheiro','ficheiro_discussão','predefinição','predefinição_discussão',
+  'ajuda','ajuda_discussão','categoria','categoria_discussão',
+]);
+
 function normalizeUrl(url) {
   try {
     const u = new URL(url);
@@ -207,7 +242,10 @@ function extractWikiInfo(url) {
     const lang = u.hostname.split('.')[0];
     const m = u.pathname.match(/^\/wiki\/(.+)$/);
     if (!m) return null;
-    if (m[1].includes(':')) return null;
+    if (m[1].includes(':')) {
+      const prefix = decodeURIComponent(m[1].split(':')[0]).toLowerCase();
+      if (WIKI_NS_PREFIXES.has(prefix)) return null;
+    }
     const title = decodeURIComponent(m[1]).replace(/_/g, ' ');
     return { lang, title };
   } catch { return null; }
