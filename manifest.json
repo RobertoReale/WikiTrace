@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WikiTrace",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Track, archive and visualise every Wikipedia page you visit.",
 
   "browser_specific_settings": {

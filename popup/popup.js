@@ -327,7 +327,7 @@ $('btn-sync-connect').addEventListener('click', async () => {
     renderSync();
     syncFlash(res.gistId ? 'Connected — found existing sync' : 'Token saved — push to create sync');
   } catch (e) {
-    syncFlash(e.message.includes('401') ? 'Invalid token' : e.message, false);
+    syncFlash(e.message.includes('401') ? 'Invalid token — needs "gist" scope' : e.message, false);
   } finally {
     btn.disabled = false; btn.textContent = 'Connect';
   }
@@ -344,7 +344,7 @@ $('btn-sync-push').addEventListener('click', async () => {
     renderSync();
     syncFlash('Pushed successfully');
   } catch (e) {
-    syncFlash(e.message, false);
+    syncFlash(e.message.includes('401') ? 'Token expired or revoked — reconnect' : e.message, false);
   } finally {
     btn.disabled = false; btn.textContent = 'Push →';
   }
@@ -361,7 +361,7 @@ $('btn-sync-pull').addEventListener('click', async () => {
     syncFlash(`Pulled — ${res.pages} pages, ${res.rl} in list`);
     await loadStats();
   } catch (e) {
-    syncFlash(e.message, false);
+    syncFlash(e.message.includes('401') ? 'Token expired or revoked — reconnect' : e.message, false);
   } finally {
     btn.disabled = false; btn.textContent = '← Pull';
   }

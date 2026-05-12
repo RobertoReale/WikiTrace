@@ -11,6 +11,7 @@
 <div class="app">
 
   <div class="topbar">
+    <button class="btn-sidebar-toggle" id="btn-sidebar-toggle" title="Toggle sidebar">☰</button>
     <div class="logo">W</div>
     <h1>WikiTrace</h1>
     <select id="site-selector" class="site-selector-select" title="Select site to view">
@@ -35,7 +36,8 @@
 
   <div class="content">
 
-    <div class="sidebar">
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    <div class="sidebar" id="sidebar">
 
       <div class="sidebar-section" id="list-controls">
         <h3>Search</h3>

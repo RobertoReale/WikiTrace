@@ -1511,6 +1511,24 @@ $('btn-theme').addEventListener('click', async () => {
   await send('SET_SETTINGS', { settings: { theme: next } });
 });
 
+// ─── Mobile sidebar toggle ────────────────────────────────────────────────────
+
+function closeMobileSidebar() {
+  $('sidebar').classList.remove('open');
+  $('sidebar-overlay').classList.remove('visible');
+}
+
+$('btn-sidebar-toggle').addEventListener('click', () => {
+  const isOpen = $('sidebar').classList.toggle('open');
+  $('sidebar-overlay').classList.toggle('visible', isOpen);
+});
+
+$('sidebar-overlay').addEventListener('click', closeMobileSidebar);
+
+document.querySelectorAll('.tab').forEach((btn) => {
+  btn.addEventListener('click', closeMobileSidebar);
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 (async () => {
