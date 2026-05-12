@@ -2,40 +2,43 @@
 
 Track, archive and visualise every Wikipedia page you visit — as a force-directed graph clustered by category.
 
+**Version 1.3.0** — Chrome & Firefox (Manifest V3)
+
 ## Features
 
 - **Automatic tracking** of every Wikipedia page you visit (or on scroll-to-bottom / manual save)
 - **Permanent cumulative archive** stored locally in your browser (no account needed)
 - **Wikipedia categories** fetched automatically and used to cluster pages in the graph
-- **Graph view** — force-directed D3.js graph with coloured clusters, navigation edges (A→B if you clicked through) and chronological edges (for unlinked pages)
+- **Graph view** — force-directed D3.js graph rendered on Canvas, with coloured clusters, navigation edges (A→B if you clicked through), chronological edges (for unlinked pages), pan/zoom, and PNG export
 - **List view** — sortable by title / date / category, filterable by category and free-text search
+- **Reading list** — save any page (Wikipedia or any website) for later, with a user-assigned category; filterable by category and domain
+- **Custom site tracking** — add any website to WikiTrace and track its pages alongside Wikipedia
+- **Revisit detection** — the toolbar icon changes and a badge appears when you revisit a previously saved page
+- **Per-page visit counter** — tracks how many times you've visited each saved page
+- **User categories** — override the auto-detected Wikipedia category on any page
 - **Batch URL import** — paste multiple Wikipedia URLs to add them at once
-- **Export / Import** — backup and restore your archive as JSON
-- **Cross-device sync** via GitHub Gist — push/pull your full archive between Chrome, Firefox and Firefox for Android
+- **Export / Import** — backup and restore your full archive as JSON
+- **Cross-device sync** via GitHub Gist — push/pull your archive between Chrome, Firefox and Firefox for Android
+- **Dark / light theme** — toggle from the popup
 
 ---
 
-## Installation (Chrome — unpacked extension)
+## Installation
 
-### 1. Download D3.js
-
-The extension ships without `d3.min.js` to keep the repo lean.  
-Download it from the official D3 releases and place it at:
-
-```
-lib/d3.min.js
-```
-
-Quick way (browser): open  
-`https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js`  
-→ Save As → save into the `lib/` folder as `d3.min.js`.
-
-### 2. Load the extension
+### Chrome (unpacked extension)
 
 1. Open Chrome and go to `chrome://extensions`
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked**
-4. Select the `WikiTrace---versione-mia` folder (the one containing `manifest.json`)
+4. Select the `WikiTrace` folder (the one containing `manifest.json`)
+
+### Firefox (temporary add-on)
+
+1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-On…**
+3. Select `manifest.json` inside the `WikiTrace` folder
+
+> Pre-built zip packages for both browsers are in the `dist/` folder.
 
 The WikiTrace icon appears in the toolbar. Pin it for easy access.
 
@@ -44,19 +47,29 @@ The WikiTrace icon appears in the toolbar. Pin it for easy access.
 ## Folder structure
 
 ```
-WikiTrace---versione-mia/
+WikiTrace/
 ├── manifest.json
-├── background.js          # Service worker — tracking, API queue, storage
-├── content.js             # Injected into Wikipedia — scroll detection & referrer
+├── background.js          # Service worker — tracking, API queue, storage, sync
+├── content.js             # Injected into all pages — scroll detection & referrer
 ├── popup/
 │   ├── popup.html
-│   └── popup.js           # Extension popup — current page status, stats, settings
+│   └── popup.js           # Extension popup — current page status, stats, sync, settings
 ├── dashboard/
 │   ├── dashboard.html
-│   ├── dashboard.js       # List view + D3 graph view
+│   ├── dashboard.js       # List view, reading list, graph view (Canvas/D3), sites panel
 │   └── dashboard.css
-└── lib/
-    └── d3.min.js          # ← you must add this file (see Installation)
+├── icons/
+│   ├── icon16.png         # Normal state icons
+│   ├── icon48.png
+│   ├── icon128.png
+│   ├── icon_revisit16.png # Revisit state icons
+│   ├── icon_revisit48.png
+│   └── icon_revisit128.png
+├── lib/
+│   └── d3.min.js
+└── dist/
+    ├── wikitrace-chrome.zip
+    └── wikitrace-firefox.zip
 ```
 
 ---
@@ -69,7 +82,19 @@ Switch mode from the popup at any time:
 |------|-----------|
 | **Automatic** | Page saved as soon as it finishes loading |
 | **On scroll** | Page saved when you reach the bottom |
-| **Manual** | Page saved only when you click "Save this page" in the popup |
+| **Manual** | Page saved only when you click "Save to reading list" in the popup |
+
+---
+
+## Reading list
+
+Any page — Wikipedia article, custom site, or generic URL — can be saved to the reading list with a user-chosen category. The reading list lives in the dashboard under its own tab and supports sorting by date, title, domain, and category, plus free-text search and domain/category filters.
+
+---
+
+## Custom site tracking
+
+You can track pages from any website, not just Wikipedia. From the dashboard **Sites** panel, add a domain (e.g. `example.com`). WikiTrace will then record every page you visit on that domain and show them in a separate list and graph alongside your Wikipedia history.
 
 ---
 
@@ -95,14 +120,14 @@ WikiTrace can sync your full archive across all devices — including Firefox an
 
 - The Gist is created **private** automatically
 - Merge strategy: union of all pages/entries, newer timestamp wins on conflict
-- Pages, reading list, tracked sites and custom-site data are all synced
+- Wikipedia pages, reading list, tracked sites and custom-site data are all synced
 - The token is stored locally only and never included in the synced Gist
 
 ---
 
 ## Roadmap
 
-- [ ] Firefox add-on store release (cross-browser support)
+- [ ] Firefox add-on store release
 - [ ] Auto-sync on browser close / on a schedule
 - [ ] Selective sync (choose which categories or sites to include)
 - [ ] Self-hosting option (sync to your own server instead of GitHub Gist)
