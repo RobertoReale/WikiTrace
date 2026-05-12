@@ -2,7 +2,7 @@
 
 Track, archive and visualise every Wikipedia page you visit — as a force-directed graph clustered by category.
 
-**Version 1.3.0** — Chrome & Firefox (Manifest V3)
+**Version 1.4.0** — Chrome & Firefox (Manifest V3)
 
 ## Features
 
